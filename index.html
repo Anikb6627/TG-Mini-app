@@ -1,359 +1,352 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="bn">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>শোলো গুটি — সঠিক ডেমো</title>
-<style>
-  :root{--bg:#fbfbfa;--card:#fff;--muted:#666;--accent:#0ea5a4}
-  body{font-family: "Noto Sans", Roboto, Arial, sans-serif; margin:0; padding:14px; background:var(--bg); color:#111}
-  header{display:flex;justify-content:space-between;align-items:center}
-  h1{margin:0;font-size:18px}
-  .small{font-size:13px;color:var(--muted)}
-  .board-wrap{max-width:520px;margin:12px auto}
-  .card{background:var(--card);padding:12px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.06)}
-  .topbar{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .btn{padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
-  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  #boardSvg{width:100%;height:auto}
-  .node-circle{cursor:pointer;transition:transform .08s}
-  .node-circle:hover{transform:scale(1.06)}
-  .selected{stroke:#f59e0b !important; stroke-width:4 !important}
-  footer{margin-top:14px;text-align:center;color:var(--muted);font-size:13px}
-  @media (max-width:420px){ :root{--scale:0.9} }
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Crash Game — Demo (No real money)</title>
+  <style>
+    :root{--bg:#0f172a;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--danger:#ef4444}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial; background:linear-gradient(180deg,#071027 0%, #071a2a 100%); color:#e6eef6; margin:0; padding:24px; box-sizing:border-box}
+    .app{max-width:980px;margin:0 auto;display:grid;grid-template-columns:1fr 360px;gap:20px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    h1{margin:0 0 8px 0;font-size:20px}
+    .panel{display:flex;flex-direction:column;gap:12px}
+    .controls{display:flex;gap:8px;align-items:center}
+    input[type="number"], input[type="text"], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:inherit}
+    button{background:var(--accent);border:none;padding:10px 12px;border-radius:10px;color:#022;cursor:pointer;font-weight:600}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .big{font-size:36px;font-weight:700;letter-spacing:1px}
+    .mult{display:flex;align-items:flex-end;gap:12px}
+    .mult .big{color:var(--accent)}
+    .history{max-height:300px;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+    .row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px;border-radius:8px;background:rgba(0,0,0,0.2)}
+    .meter{height:8px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
+    .meter > i{display:block;height:100%;width:0%;background:linear-gradient(90deg, rgba(6,182,212,1), rgba(56,189,248,0.9))}
+    .note{color:var(--muted);font-size:13px}
+    .danger{color:var(--danger);font-weight:700}
+    footer{margin-top:14px;color:var(--muted);font-size:13px}
+    @media (max-width:900px){.app{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>শোলো গুটি (Sholo Guti) — Demo</h1>
-    <div class="small">নিয়ম: লাফ করে খাওয়া (jump capture). চেইন-জাম্প সমর্থিত।</div>
-  </div>
-  <div>
-    <button id="btnReset" class="btn">Reset</button>
-    <button id="btnHelp" class="btn">Help</button>
-  </div>
-</header>
+  <div class="app">
+    <div class="card panel">
+      <h1>Crash Game — Demo</h1>
+      <div class="note">শিক্ষামূলক ডেমো — কোনো বাস্তব টাকা নেই।</div>
 
-<div class="board-wrap">
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div class="small">পালা: <strong id="turnText">Player 1 (লাল)</strong></div>
-      <div class="small">লাল = Player1 · নীল = Player2</div>
-    </div>
-
-    <svg id="boardSvg" viewBox="0 0 520 720" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:12px auto"></svg>
-
-    <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px">
-      <div class="small" id="statusText">নির্দেশ: নিজের গুটি ক্লিক করুন → তারপর যেখানে সরাবেন সেখানে ক্লিক করুন।</div>
-      <div>
-        <button id="btnUndo" class="btn">Undo</button>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="note">Balance</div>
+          <div class="big" id="balanceDisplay">1000.00</div>
+        </div>
+        <div style="text-align:right">
+          <div class="note">Round</div>
+          <div id="roundDisplay">—</div>
+        </div>
       </div>
+
+      <div class="card" style="padding:12px">
+        <div class="controls">
+          <label class="note">Bet</label>
+          <input id="betInput" type="number" min="1" step="1" value="10" style="width:100px" />
+          <label class="note">Auto cashout (x)</label>
+          <input id="autoInput" type="number" min="1" step="0.1" value="2" style="width:90px" />
+          <button id="startBtn">Start Round</button>
+          <button id="cashoutBtn" class="secondary" disabled>Cashout</button>
+        </div>
+        <div class="note">Auto-play:
+          <select id="autoplaySelect" style="width:140px">
+            <option value="off">Off</option>
+            <option value="10">10 rounds</option>
+            <option value="50">50 rounds</option>
+            <option value="manual">Manual until stop</option>
+          </select>
+          <button id="stopAuto" class="secondary" style="margin-left:6px" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="note">Multiplier</div>
+            <div class="mult">
+              <div class="big" id="multDisplay">1.00x</div>
+              <div class="note" id="statusNote">Waiting</div>
+            </div>
+          </div>
+          <div style="width:240px">
+            <div class="note">Progress</div>
+            <div class="meter"><i id="meterBar"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="note">Last Result</div>
+            <div id="lastResult">—</div>
+            <div class="note">Wins / Losses</div>
+            <div id="wl">0 / 0</div>
+          </div>
+          <div style="text-align:right">
+            <div class="note">Total Bets</div>
+            <div id="totalBets">0</div>
+            <div class="note">Profit</div>
+            <div id="profit">0.00</div>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        Demo logic only. Oversimplified RNG for teaching. Don't use for gambling.
+      </footer>
+    </div>
+
+    <div class="card" style="padding:12px">
+      <h1>History</h1>
+      <div class="history" id="historyList"></div>
     </div>
   </div>
-</div>
-
-<footer>Made for PlayMancerX • Bengali demo — সঠিক চলন, capture ও chain-jump সহ</footer>
 
 <script>
-/* ===================== BOARD DEFINITION =====================
- We build a node graph (nodes with x,y) and an adjacency map (edges).
- Movement allowed only along edges. Capture = jump over opponent node
- to the node beyond (which must exist & be empty).
- Chain jumps: after a capture, if another capture possible from landing node,
- player may continue (we auto-allow chain; player must click next landing).
-==============================================================*/
-
-/* Node coordinates (arranged to resemble traditional Sholo Guti pattern).
-   IDs 0..33 (34 nodes). Coordinates tuned for viewBox 520x720.
+/*
+  Educational Crash Game (front-end only)
+  - No real money / no server. All RNG client-side for demo.
+  - Features: start round, manual cashout, auto-cashout, autoplay, history.
 */
-const nodes = [
-  // top small triangle (0..4)
-  {id:0,x:260,y:40},
-  {id:1,x:220,y:90},
-  {id:2,x:260,y:90},
-  {id:3,x:300,y:90},
-  {id:4,x:260,y:140},
 
-  // top connecting row (5..9)
-  {id:5,x:90,y:200},{id:6,x:170,y:200},{id:7,x:250,y:200},{id:8,x:330,y:200},{id:9,x:410,y:200},
+const balanceEl = document.getElementById('balanceDisplay');
+const betInput = document.getElementById('betInput');
+const autoInput = document.getElementById('autoInput');
+const startBtn = document.getElementById('startBtn');
+const cashoutBtn = document.getElementById('cashoutBtn');
+const multDisplay = document.getElementById('multDisplay');
+const statusNote = document.getElementById('statusNote');
+const meterBar = document.getElementById('meterBar');
+const historyList = document.getElementById('historyList');
+const roundDisplay = document.getElementById('roundDisplay');
+const lastResult = document.getElementById('lastResult');
+const wl = document.getElementById('wl');
+const totalBetsEl = document.getElementById('totalBets');
+const profitEl = document.getElementById('profit');
+const autoplaySelect = document.getElementById('autoplaySelect');
+const stopAutoBtn = document.getElementById('stopAuto');
 
-  // central 5x5-ish (10..24)
-  {id:10,x:90,y:280},{id:11,x:170,y:280},{id:12,x:250,y:280},{id:13,x:330,y:280},{id:14,x:410,y:280},
-  {id:15,x:90,y:360},{id:16,x:170,y:360},{id:17,x:250,y:360},{id:18,x:330,y:360},{id:19,x:410,y:360},
-  {id:20,x:90,y:440},{id:21,x:170,y:440},{id:22,x:250,y:440},{id:23,x:330,y:440},{id:24,x:410,y:440},
+let balance = 1000.0;
+let round = 0;
+let running = false;
+let currentMultiplier = 1.0;
+let crashPoint = null;
+let stepInterval = null;
+let betsTotal = 0;
+let wins = 0, losses = 0;
+let profit = 0;
+let autoplayMode = false;
+let autoplayRemaining = 0;
 
-  // lower connector (25..29)
-  {id:25,x:90,y:520},{id:26,x:170,y:520},{id:27,x:250,y:520},{id:28,x:330,y:520},{id:29,x:410,y:520},
+function fmt(n){ return Number(n).toFixed(2); }
+function setBalance(v){ balance = v; balanceEl.textContent = fmt(balance); }
 
-  // bottom triangle (30..33)
-  {id:30,x:250,y:600},{id:31,x:210,y:650},{id:32,x:250,y:650},{id:33,x:290,y:650}
-];
-const N = nodes.length;
+setBalance(balance);
 
-/* Edge pairs (undirected). This must reflect actual lines shown in board image.
-   Add edges so nodes connected as per pattern (horizontal, vertical, some diagonals).
-*/
-const edgesPairs = [
-  // top triangle
-  [0,1],[0,2],[0,3],[1,2],[2,3],[2,4],
-  // top connectors
-  [4,7],
-  [5,6],[6,7],[7,8],[8,9],
-  [5,10],[6,11],[7,12],[8,13],[9,14],
-  // central grid horizontals
-  [10,11],[11,12],[12,13],[13,14],
-  [15,16],[16,17],[17,18],[18,19],
-  [20,21],[21,22],[22,23],[23,24],
-  // verticals
-  [10,15],[15,20],[11,16],[16,21],[12,17],[17,22],[13,18],[18,23],[14,19],[19,24],
-  // some diagonals to match pattern
-  [10,16],[11,17],[12,18],[13,19],
-  [15,21],[16,22],[17,23],[18,24],
-  // lower connectors
-  [25,20],[26,21],[27,22],[28,23],[29,24],
-  [25,26],[26,27],[27,28],[28,29],
-  // bottom triangle
-  [27,30],[30,31],[30,32],[30,33],[31,32],[32,33]
-];
-
-/* Build adjacency set */
-const adjacency = {};
-for(const n of nodes) adjacency[n.id] = new Set();
-for(const [a,b] of edgesPairs){ adjacency[a].add(b); adjacency[b].add(a); }
-
-/* Game state:
-   state[i] = 0 empty, 1 player1 (red), 2 player2 (blue)
-*/
-let state = new Array(N).fill(0);
-
-/* Place initial positions similar to traditional: top cluster = player1 (red),
-   bottom cluster = player2 (blue). Central band empty for movement.
-*/
-function initPositions(){
-  state.fill(0);
-  const red = [0,1,2,3,4,5,6,7,8,9]; // top cluster (adjustable)
-  const blue = [25,26,27,28,29,30,31,32,33]; // bottom cluster
-  red.forEach(id=> state[id]=1);
-  blue.forEach(id=> state[id]=2);
+// RNG for crash point — biased so small multipliers more likely.
+// This is a simple demo distribution using inverse-exponential transform.
+function generateCrashPoint() {
+  // choose base randomness
+  const r = Math.random(); // 0..1
+  // tweak to get reasonable distribution: min 1.0, long tail
+  const min = 1.0;
+  const max = 100; // clamp max for UI sanity
+  // transform: heavy tail
+  let x = Math.max(min, Math.floor((1 / (1 - r)) * 100) / 100);
+  if (x > max) x = max;
+  // introduce occasional very small crashes
+  if (Math.random() < 0.05) x = 1 + Math.random() * 0.5;
+  return x;
 }
 
-/* Rendering: draw edges, nodes, and tokens using SVG */
-const svg = document.getElementById('boardSvg');
+function startRound() {
+  if (running) return;
+  const bet = Number(betInput.value);
+  if (!bet || bet <= 0) { alert('সঠিক বেট বসাও'); return; }
+  if (bet > balance) { alert('Balance এ পর্যাপ্ত টাকা নেই'); return; }
 
-function renderBoard(){
-  svg.innerHTML = '';
-  // draw edges (lines)
-  for(const [a,b] of edgesPairs){
-    const na = nodes.find(x=>x.id===a), nb = nodes.find(x=>x.id===b);
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.setAttribute('x1', na.x); line.setAttribute('y1', na.y);
-    line.setAttribute('x2', nb.x); line.setAttribute('y2', nb.y);
-    line.setAttribute('stroke','#6b7280'); line.setAttribute('stroke-width','2');
-    svg.appendChild(line);
-  }
-  // draw nodes group
-  for(const n of nodes){
-    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-    g.setAttribute('transform', `translate(${n.x},${n.y})`);
-    g.classList.add('node');
-    g.dataset.id = n.id;
+  // initialize
+  running = true;
+  currentMultiplier = 1.0;
+  multDisplay.textContent = currentMultiplier.toFixed(2) + 'x';
+  meterBar.style.width = '0%';
+  statusNote.textContent = 'Running…';
+  round++;
+  roundDisplay.textContent = round;
+  crashPoint = generateCrashPoint();
+  // deduct bet immediately (typical behavior)
+  balance -= bet;
+  setBalance(balance);
+  betsTotal++;
+  totalBetsEl.textContent = betsTotal;
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    circle.setAttribute('r',16);
-    circle.setAttribute('fill','#fff');
-    circle.setAttribute('stroke','#cfcfcf');
-    circle.setAttribute('stroke-width','3');
-    circle.classList.add('node-circle');
-    g.appendChild(circle);
+  // enable cashout button
+  cashoutBtn.disabled = false;
+  startBtn.disabled = true;
 
-    // token indicator
-    if(state[n.id] === 1){
-      const t = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      t.setAttribute('r',10); t.setAttribute('fill','#ef4444'); g.appendChild(t);
-    } else if(state[n.id] === 2){
-      const t = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      t.setAttribute('r',10); t.setAttribute('fill','#2563eb'); g.appendChild(t);
-    }
+  // animation speed and step size can be tuned
+  let speed = 60; // ms per step
+  let accel = 1.01; // multiplier growth factor per step (slower -> closer to real feel)
+  const autoCashout = Number(autoInput.value) || null;
 
-    // invisible text for touch target (not necessary)
-    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-    txt.setAttribute('y',6); txt.setAttribute('text-anchor','middle');
-    txt.textContent = ''; txt.style.pointerEvents = 'none';
-    g.appendChild(txt);
+  stepInterval = setInterval(() => {
+    // grow multiplier multiplicatively for smoother curve
+    currentMultiplier = currentMultiplier * accel;
+    // small linear bump for feel
+    currentMultiplier += 0.01;
 
-    g.addEventListener('click', onNodeClick);
-    svg.appendChild(g);
-  }
-  // update selection highlight
-  highlightSelected();
-  updateStatus();
-}
+    // update UI
+    multDisplay.textContent = currentMultiplier.toFixed(2) + 'x';
+    // map multiplier to progress bar (log scale for nicer UI)
+    const progress = Math.min(100, Math.log(currentMultiplier + 1) / Math.log(100 + 1) * 100);
+    meterBar.style.width = progress + '%';
 
-/* Selection / Move logic */
-let selected = null; // selected node id of current player's piece
-let currentPlayer = 1; // 1 red, 2 blue
-const turnText = document.getElementById('turnText');
-const statusText = document.getElementById('statusText');
-
-function updateStatus(){
-  turnText.textContent = currentPlayer===1 ? 'Player 1 (লাল)' : 'Player 2 (নীল)';
-  // check win
-  const p1count = state.filter(v=>v===1).length;
-  const p2count = state.filter(v=>v===2).length;
-  if(p1count === 0){ statusText.textContent = 'Player 2 জয়ী!'; alert('Player 2 (নীল) জয়ী!'); }
-  else if(p2count === 0){ statusText.textContent = 'Player 1 জয়ী!'; alert('Player 1 (লাল) জয়ী!'); }
-}
-
-/* Helper: is neighbor (adjacent) */
-function isNeighbor(a,b){ return adjacency[a].has(b); }
-
-/* Try move: returns object {ok:true, captured:bool, chainPossible:bool}
-   - adjacent empty => simple move
-   - else try jump: find mid node between a and b (common neighbor) s.t. mid occupied by opponent and b empty
-   - if jump performed, remove mid (capture)
-   - after capture, compute whether further captures possible from landing node (chain)
-*/
-function tryMove(fromId,toId){
-  if(state[fromId] !== currentPlayer) return {ok:false, reason:'not your piece'};
-  if(state[toId] !== 0) return {ok:false, reason:'destination not empty'};
-
-  // simple adjacent move
-  if(isNeighbor(fromId,toId)){
-    state[toId] = state[fromId];
-    state[fromId] = 0;
-    return {ok:true, captured:false, chainPossible:false};
-  }
-
-  // try jump: find mid node that is neighbor to both fromId and toId
-  for(const mid of adjacency[fromId]){
-    if(adjacency[mid].has(toId)){
-      // mid between from and to
-      const oppVal = currentPlayer===1 ? 2 : 1;
-      if(state[mid] === oppVal && state[toId] === 0){
-        // perform capture
-        state[toId] = state[fromId];
-        state[fromId] = 0;
-        state[mid] = 0; // remove opponent
-        // after capture, check chain possibilities from landing toId
-        const chain = hasCaptureFrom(toId, currentPlayer);
-        return {ok:true, captured:true, chainPossible: chain};
-      }
-    }
-  }
-  return {ok:false, reason:'invalid move'};
-}
-
-/* Check if from node has any capture move for given player */
-function hasCaptureFrom(nodeId, player){
-  const opp = player===1?2:1;
-  for(const mid of adjacency[nodeId]){
-    if(state[mid] === opp){
-      // find landing: any neighbor of mid that is also neighbor in same straight connection and empty
-      for(const land of adjacency[mid]){
-        if(land === nodeId) continue;
-        // check land is neighbor of mid and not equal from node (we already know)
-        // ensure land is empty and mid is between nodeId and land: mid connected to both nodeId and land
-        if(adjacency[nodeId].has(mid) && adjacency[mid].has(land) && state[land]===0){
-          return true;
-        }
-      }
-    }
-  }
-  return false;
-}
-
-/* Node click handler */
-function onNodeClick(e){
-  const id = parseInt(e.currentTarget.dataset.id);
-  // if clicked own piece -> select/unselect
-  if(state[id] === currentPlayer){
-    selected = (selected===id) ? null : id;
-    highlightSelected();
-    return;
-  }
-  // if clicked empty and selected exists -> attempt move
-  if(state[id] === 0 && selected !== null){
-    const res = tryMove(selected, id);
-    if(res.ok){
-      // if capture & chainPossible -> keep current player same and set selected to new landed node
-      if(res.captured && res.chainPossible){
-        selected = id; // allow continue capturing
-        statusText.textContent = 'Capture হয়েছে — আরো যাতে পারেন, চালিয়ে যান!';
-        renderBoard();
-        return;
-      }
-      // otherwise switch player
-      selected = null;
-      currentPlayer = currentPlayer===1?2:1;
-      updateStatus();
-      renderBoard();
+    // auto-cashout check
+    if (autoCashout && currentMultiplier >= autoCashout) {
+      doCashout(bet, autoCashout, true);
       return;
-    } else {
-      alert('ভুল চাল: ' + (res.reason || 'অবৈধ গতি'));
     }
+
+    // crash check: if currentMultiplier >= crashPoint -> crash
+    if (currentMultiplier >= crashPoint) {
+      // crashed — player loses bet (already deducted)
+      clearInterval(stepInterval);
+      running = false;
+      startBtn.disabled = false;
+      cashoutBtn.disabled = true;
+      statusNote.textContent = 'Crashed 😵';
+      lastResult.textContent = `Crashed @ ${crashPoint.toFixed(2)}x — Lost ${fmt(bet)}`;
+      losses++;
+      wl.textContent = wins + ' / ' + losses;
+      historyAdd({round, bet, result: 0, crash: crashPoint});
+      profit = profit - bet;
+      profitEl.textContent = fmt(profit);
+      stopAutoIfNeeded();
+    }
+
+    // slightly increase accel over time to simulate speed-up
+    accel *= 1.0008;
+  }, speed);
+}
+
+function doCashout(bet, atMultiplier=null, isAuto=false) {
+  if (!running) return;
+  // calculate winnings
+  const m = (atMultiplier !== null) ? atMultiplier : currentMultiplier;
+  const winnings = bet * m;
+  clearInterval(stepInterval);
+  running = false;
+  startBtn.disabled = false;
+  cashoutBtn.disabled = true;
+  // credit winnings to balance (bet was deducted earlier)
+  balance += winnings;
+  setBalance(balance);
+  statusNote.textContent = 'Cashed out ✅';
+  lastResult.textContent = `Cashed out @ ${m.toFixed(2)}x — Won ${fmt(winnings)}`;
+  wins++;
+  wl.textContent = wins + ' / ' + losses;
+  historyAdd({round, bet, result: winnings, cashedAt: m, auto: isAuto});
+  profit = profit + (winnings - bet);
+  profitEl.textContent = fmt(profit);
+  stopAutoIfNeeded();
+}
+
+function historyAdd(obj) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  if (obj.result > 0) {
+    el.innerHTML = `<div>Round ${obj.round} — Bet ${fmt(obj.bet)} — <strong>Win ${fmt(obj.result)}</strong></div><div>${obj.cashedAt ? fmt(obj.cashedAt)+'x' : ''}</div>`;
+  } else {
+    el.innerHTML = `<div>Round ${obj.round} — Bet ${fmt(obj.bet)} — <span class="danger">Crashed</span></div><div>${fmt(obj.crash)}x</div>`;
+  }
+  historyList.prepend(el);
+}
+
+// event bindings
+startBtn.addEventListener('click', () => {
+  startRound();
+});
+
+cashoutBtn.addEventListener('click', () => {
+  const bet = Number(betInput.value) || 0;
+  // manual cashout at current multiplier
+  doCashout(bet, currentMultiplier, false);
+});
+
+autoplaySelect.addEventListener('change', () => {
+  const v = autoplaySelect.value;
+  if (v === 'off') { autoplayMode = false; stopAutoBtn.disabled = true; return; }
+  autoplayMode = true;
+  stopAutoBtn.disabled = false;
+  if (v === 'manual') {
+    autoplayRemaining = Infinity;
+  } else {
+    autoplayRemaining = Number(v);
+  }
+  // start autoplay loop if not running
+  if (!running) autoplayLoop();
+});
+
+stopAutoBtn.addEventListener('click', () => {
+  autoplayMode = false;
+  autoplayRemaining = 0;
+  stopAutoBtn.disabled = true;
+  autoplaySelect.value = 'off';
+});
+
+// autoplayer: starts round, waits end, optionally cashes out if autoInput set
+async function autoplayLoop() {
+  if (!autoplayMode || autoplayRemaining === 0 || balance <= 0) return;
+  // start new round
+  startRound();
+  // wait until running becomes false (round ended)
+  await new Promise(resolve => {
+    const check = setInterval(() => {
+      if (!running) { clearInterval(check); resolve(); }
+    }, 50);
+  });
+  // decrement counter if finite
+  if (isFinite(autoplayRemaining)) autoplayRemaining--;
+  // small delay between rounds
+  setTimeout(() => {
+    if (autoplayMode && autoplayRemaining !== 0 && balance > 0) {
+      autoplayLoop();
+    } else {
+      autoplayMode = false;
+      autoplaySelect.value = 'off';
+      stopAutoBtn.disabled = true;
+    }
+  }, 300);
+}
+
+function stopAutoIfNeeded() {
+  if (!autoplayMode) return;
+  if (autoplayRemaining === Infinity) {
+    // keep going
+    setTimeout(autoplayLoop, 300);
+  } else if (autoplayRemaining > 0) {
+    setTimeout(autoplayLoop, 300);
+  } else {
+    autoplayMode = false;
+    autoplaySelect.value = 'off';
+    stopAutoBtn.disabled = true;
   }
 }
 
-/* Visual highlight */
-function highlightSelected(){
-  const groups = svg.querySelectorAll('g.node');
-  groups.forEach(g=>{
-    const circ = g.querySelector('circle');
-    circ.classList.remove('selected');
-    const gid = parseInt(g.dataset.id);
-    if(selected !== null && gid === selected){
-      circ.classList.add('selected');
-    }
-  });
-}
-
-/* Undo support (simple history stack) */
-let historyStack = [];
-function pushHistory(){
-  historyStack.push({state: state.slice(), currentPlayer, selected: selected});
-  if(historyStack.length > 50) historyStack.shift();
-}
-function undo(){
-  if(historyStack.length === 0) return alert('Undo history খালি।');
-  const last = historyStack.pop();
-  state = last.state.slice();
-  currentPlayer = last.currentPlayer;
-  selected = last.selected;
-  renderBoard();
-  updateStatus();
-}
-
-/* Reset & help buttons */
-document.getElementById('btnReset').addEventListener('click', ()=>{
-  if(confirm('খেলাটি রিসেট করবেন? (হ্যাঁ নিশ্চিত)')){ initPositions(); historyStack = []; selected=null; currentPlayer=1; renderBoard(); updateStatus(); }
+// disallow leaving running round accidentally
+window.addEventListener('beforeunload', (e) => {
+  if (running) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
-document.getElementById('btnHelp').addEventListener('click', ()=>{
-  alert('নিয়ম (সরল — Demo):\n\n1) নিজের গুটি ক্লিক করুন যাতে সেটি সিলেক্ট হয়।\n2) তারপর যেখানে সরাবেন সেখানে ক্লিক করুন (শুধু সংযুক্ত নোড বা সোজা লাফ দিয়ে ক্যাপচার)।\n3) ক্যাপচার হলে বিরোধীর গুটি লাফের মাঝখানে থাকা গুটিটি মুছে যাবে।\n4) চেইন-জাম্প সমর্থিত: একাধিক ক্যাপচার করলে একই খেলোয়াড় ধারাবাহিকভাবে চালাতে পারে।\n5) যে খেলোয়াড় সব গুটি হারায় বা চলার জায়গা না পায় সে হারে।');
-});
-
-/* Before each move push history */
-function beforeMoveSave(){ pushHistory(); }
-
-/* Initialize & render */
-initPositions();
-renderBoard();
-updateStatus();
-
-/* Make moves go through history push: monkey-patch tryMove calls via wrapper */
-(function wrapTryMove(){
-  const orig = tryMove;
-  tryMove = function(from,to){
-    beforeMoveSave();
-    return orig(from,to);
-  };
-})();
-
-/* Undo button */
-document.getElementById('btnUndo').addEventListener('click', undo);
-
-/* Expose renderBoard for resize (optional) */
-window.addEventListener('resize', ()=> renderBoard());
 </script>
 </body>
 </html>
