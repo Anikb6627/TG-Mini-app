@@ -1,18 +1,273 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Telegram Mini App</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PlayMancerX — Ludo & 16 Guti</title>
+  <style>
+    :root{--bg:#f7f7f7;--card:#fff;--muted:#666}
+    body{font-family:system-ui,Segoe UI,Roboto,Arial; margin:0; padding:18px; background:var(--bg); color:#111}
+    header{display:flex;gap:8px;align-items:center;justify-content:space-between}
+    h1{font-size:20px;margin:0}
+    .menu{margin-top:12px;display:flex;gap:8px}
+    .btn{padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:var(--card);cursor:pointer}
+    .btn.active{background:#0ea5a4;color:#fff;border-color:#0ea5a4}
+    .card{background:var(--card);padding:14px;border-radius:10px;margin-top:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+    /* 16 guti */
+    #board{display:grid;grid-template-columns:repeat(5,64px);grid-template-rows:repeat(5,64px);gap:6px;justify-content:center}
+    .cell{width:64px;height:64px;background:#fff;border-radius:8px;border:1px solid #dcdcdc;display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;user-select:none}
+    .player1{color:#ef4444} .player2{color:#2563eb}
+    /* ludo */
+    #ludo-track{display:flex;flex-wrap:wrap;max-width:360px;margin:8px auto;gap:6px}
+    .lcell{width:44px;height:44px;background:#fff;border:1px solid #ddd;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600}
+    .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap}
+    .token{width:22px;height:22px;border-radius:50%;display:inline-block}
+    .t1{background:#ef4444} .t2{background:#2563eb}
+    .small{font-size:13px;color:var(--muted)}
+    footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px}
+    @media (max-width:420px){
+      #board{grid-template-columns:repeat(5,54px);grid-template-rows:repeat(5,54px)}
+      .cell{width:54px;height:54px;font-size:22px}
+      .lcell{width:38px;height:38px}
+    }
+  </style>
 </head>
 <body>
-    <h1>Welcome to TG Mini App 🎮</h1>
-    <p>This is a test for Ludo & 16 Guti Game</p>
-    <button onclick="sendData()">Send Data to Bot</button>
+  <header>
+    <h1>PlayMancerX — Games</h1>
+    <div class="small">Ludo & 16 Guti</div>
+  </header>
 
-    <script>
-        function sendData() {
-            Telegram.WebApp.sendData("Hello from Mini App!");
-        }
-    </script>
+  <div class="menu">
+    <button id="btn16" class="btn active">♟ 16 Guti</button>
+    <button id="btnLudo" class="btn">🎲 Ludo (Simple)</button>
+  </div>
+
+  <!-- 16 Guti -->
+  <div id="gutiArea" class="card">
+    <div style="text-align:center">
+      <strong>16 Guti — Click an empty cell to place a piece. Alternate turns.</strong>
+      <div id="turnText" class="small" style="margin-top:6px">Player 1's turn (🔴)</div>
+    </div>
+    <div id="board" style="margin-top:12px"></div>
+    <div style="margin-top:10px;text-align:center" class="small">Red = Player1, Blue = Player2</div>
+  </div>
+
+  <!-- Ludo -->
+  <div id="ludoArea" class="card" style="display:none">
+    <div style="text-align:center">
+      <strong>Simple 2-player Ludo (linear track)</strong>
+      <div class="small" id="ludoStatus">Player 1's turn — roll dice</div>
+    </div>
+
+    <div id="ludo-track"></div>
+
+    <div class="controls">
+      <button id="rollBtn" class="btn">Roll Dice 🎲</button>
+      <div id="diceVal" class="small">Dice: -</div>
+      <div id="activePlayer" class="small">Active: P1</div>
+    </div>
+
+    <div style="margin-top:10px;text-align:center">
+      <div class="small">Each player has 4 tokens. Click a token number to move it after rolling.</div>
+      <div style="margin-top:8px">
+        <button id="showP1" class="btn">P1 Tokens</button>
+        <button id="showP2" class="btn">P2 Tokens</button>
+      </div>
+    </div>
+
+    <div id="tokenArea" style="margin-top:10px;text-align:center"></div>
+  </div>
+
+  <footer>Made for PlayMancerX • Simple demo version</footer>
+
+<script>
+/* --------- Menu toggle --------- */
+const btn16 = document.getElementById('btn16');
+const btnLudo = document.getElementById('btnLudo');
+const gutiArea = document.getElementById('gutiArea');
+const ludoArea = document.getElementById('ludoArea');
+
+btn16.addEventListener('click', ()=>{ btn16.classList.add('active'); btnLudo.classList.remove('active'); gutiArea.style.display='block'; ludoArea.style.display='none'; })
+btnLudo.addEventListener('click', ()=>{ btnLudo.classList.add('active'); btn16.classList.remove('active'); gutiArea.style.display='none'; ludoArea.style.display='block'; })
+
+/* --------- 16 Guti game (5x5 board, simple turn-based placement) --------- */
+const boardEl = document.getElementById('board');
+const turnText = document.getElementById('turnText');
+let currentPlayer = 1; // 1 or 2
+const cells = [];
+
+function init16() {
+  boardEl.innerHTML = '';
+  cells.length = 0;
+  for (let i=0;i<25;i++){
+    const c = document.createElement('div');
+    c.className='cell';
+    c.dataset.index = i;
+    c.addEventListener('click', gutiClick);
+    boardEl.appendChild(c);
+    cells.push(c);
+  }
+  currentPlayer = 1;
+  updateTurnText();
+}
+function updateTurnText(){
+  turnText.textContent = currentPlayer===1 ? "Player 1's turn (🔴)" : "Player 2's turn (🔵)";
+}
+function gutiClick(e){
+  const c = e.currentTarget;
+  if(c.textContent !== '') return; // already occupied
+  c.textContent = '●';
+  if(currentPlayer===1){
+    c.classList.add('player1');
+    currentPlayer = 2;
+  } else {
+    c.classList.add('player2');
+    currentPlayer = 1;
+  }
+  updateTurnText();
+}
+init16();
+
+/* --------- Ludo (simple linear track) --------- */
+/*
+  Implementation details (simplified):
+  - Two players (P1 red, P2 blue), each 4 tokens.
+  - Track length 20 cells (indexes 0..19). Home tokens start off-track (-1).
+  - Player rolls dice (1..6). Choose one of your tokens to move by dice value.
+  - No capture logic or safe squares for simplicity — if lands on opponent, opponent token returns home.
+  - Basic turn alternation.
+*/
+const TRACK_LEN = 20;
+const ltrack = document.getElementById('ludo-track');
+const rollBtn = document.getElementById('rollBtn');
+const diceVal = document.getElementById('diceVal');
+const activePlayerEl = document.getElementById('activePlayer');
+const ludoStatus = document.getElementById('ludoStatus');
+const tokenArea = document.getElementById('tokenArea');
+const showP1 = document.getElementById('showP1');
+const showP2 = document.getElementById('showP2');
+
+let trackCells = [];
+let p1 = [-1,-1,-1,-1]; // positions (-1 = home)
+let p2 = [-1,-1,-1,-1];
+let lcurrent = 1; // 1 or 2
+let lastRoll = null;
+
+function buildTrack(){
+  ltrack.innerHTML = '';
+  trackCells = [];
+  for(let i=0;i<TRACK_LEN;i++){
+    const el = document.createElement('div');
+    el.className = 'lcell';
+    el.dataset.index = i;
+    ltrack.appendChild(el);
+    trackCells.push(el);
+  }
+  renderTrack();
+}
+
+function renderTrack(){
+  // clear
+  trackCells.forEach(tc=>tc.textContent='');
+  // render p1 tokens
+  p1.forEach((pos,idx)=>{
+    if(pos>=0 && pos<TRACK_LEN){
+      trackCells[pos].innerHTML = `<span class="token t1" title="P1-${idx+1}"></span>`;
+    }
+  });
+  p2.forEach((pos,idx)=>{
+    if(pos>=0 && pos<TRACK_LEN){
+      // if already has P1, show both as small markers (simple)
+      trackCells[pos].innerHTML += `<span class="token t2" style="margin-left:4px" title="P2-${idx+1}"></span>`;
+    }
+  });
+  // update status
+  activePlayerEl.textContent = `Active: P${lcurrent}`;
+  diceVal.textContent = lastRoll ? `Dice: ${lastRoll}` : 'Dice: -';
+}
+
+function rollDice(){
+  lastRoll = Math.floor(Math.random()*6)+1;
+  ludoStatus.textContent = `You rolled ${lastRoll}. Choose a token to move.`;
+  renderTokenButtons();
+  renderTrack();
+}
+
+rollBtn.addEventListener('click', ()=>{
+  rollDice();
+});
+
+// prepare token choose UI
+function renderTokenButtons(){
+  tokenArea.innerHTML = '';
+  const arr = lcurrent===1 ? p1 : p2;
+  arr.forEach((pos,idx)=>{
+    const b = document.createElement('button');
+    b.className='btn';
+    b.textContent = `Token ${idx+1} (${pos===-1?'H':'#'+pos})`;
+    b.style.margin = '4px';
+    b.addEventListener('click', ()=> tryMoveToken(idx));
+    tokenArea.appendChild(b);
+  });
+}
+
+function tryMoveToken(tokenIdx){
+  if(lastRoll===null){
+    alert('Please roll the dice first.');
+    return;
+  }
+  const arr = lcurrent===1 ? p1 : p2;
+  const opp = lcurrent===1 ? p2 : p1;
+
+  // if token at home (-1) and roll > 0 -> put on start square (we use 0 as start)
+  let currPos = arr[tokenIdx];
+  let newPos;
+  if(currPos === -1){
+    // require 1..6 to enter; here allow any roll to enter at position 0 for simplicity
+    newPos = lastRoll - 1; // place nearer based on roll so it moves on enter
+  } else {
+    newPos = currPos + lastRoll;
+  }
+  // wrap
+  if(newPos >= TRACK_LEN) newPos = TRACK_LEN-1; // can't go beyond end
+
+  // if some opponent token is on newPos -> send that token home (simple capture)
+  for(let i=0;i<opp.length;i++){
+    if(opp[i] === newPos){
+      opp[i] = -1; // sent home
+    }
+  }
+  arr[tokenIdx] = newPos;
+  // clear roll
+  lastRoll = null;
+  lcurrent = lcurrent===1 ? 2 : 1;
+  ludoStatus.textContent = `Moved. Now Player ${lcurrent}'s turn.`;
+  renderTokenButtons();
+  renderTrack();
+}
+
+// quick show tokens controls
+showP1.addEventListener('click', ()=>{
+  lcurrent = 1;
+  renderTokenButtons();
+  renderTrack();
+});
+showP2.addEventListener('click', ()=>{
+  lcurrent = 2;
+  renderTokenButtons();
+  renderTrack();
+});
+
+// initialise ludo
+buildTrack();
+renderTokenButtons();
+renderTrack();
+
+/* Optional: expose Telegram.WebApp API if present (no-op if not available) */
+if(window.Telegram && Telegram.WebApp){
+  try{ Telegram.WebApp.expand(); }catch(e){}
+}
+</script>
 </body>
-      </html>
+</html>
