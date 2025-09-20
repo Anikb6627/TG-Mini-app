@@ -1,273 +1,339 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PlayMancerX — Ludo & 16 Guti</title>
-  <style>
-    :root{--bg:#f7f7f7;--card:#fff;--muted:#666}
-    body{font-family:system-ui,Segoe UI,Roboto,Arial; margin:0; padding:18px; background:var(--bg); color:#111}
-    header{display:flex;gap:8px;align-items:center;justify-content:space-between}
-    h1{font-size:20px;margin:0}
-    .menu{margin-top:12px;display:flex;gap:8px}
-    .btn{padding:8px 12px;border-radius:8px;border:1px solid #ddd;background:var(--card);cursor:pointer}
-    .btn.active{background:#0ea5a4;color:#fff;border-color:#0ea5a4}
-    .card{background:var(--card);padding:14px;border-radius:10px;margin-top:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-    /* 16 guti */
-    #board{display:grid;grid-template-columns:repeat(5,64px);grid-template-rows:repeat(5,64px);gap:6px;justify-content:center}
-    .cell{width:64px;height:64px;background:#fff;border-radius:8px;border:1px solid #dcdcdc;display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;user-select:none}
-    .player1{color:#ef4444} .player2{color:#2563eb}
-    /* ludo */
-    #ludo-track{display:flex;flex-wrap:wrap;max-width:360px;margin:8px auto;gap:6px}
-    .lcell{width:44px;height:44px;background:#fff;border:1px solid #ddd;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600}
-    .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap}
-    .token{width:22px;height:22px;border-radius:50%;display:inline-block}
-    .t1{background:#ef4444} .t2{background:#2563eb}
-    .small{font-size:13px;color:var(--muted)}
-    footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px}
-    @media (max-width:420px){
-      #board{grid-template-columns:repeat(5,54px);grid-template-rows:repeat(5,54px)}
-      .cell{width:54px;height:54px;font-size:22px}
-      .lcell{width:38px;height:38px}
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>শোলো গুটি — PlayMancerX (Demo)</title>
+<style>
+  :root{--bg:#faf9f7;--card:#fff;--muted:#666;--accent:#0ea5a4}
+  body{font-family: "Noto Sans", Roboto, Arial, sans-serif; margin:0; padding:14px; background:var(--bg); color:#111}
+  header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  h1{margin:0;font-size:18px}
+  .topbar{display:flex;gap:10px;align-items:center}
+  .balance{background:var(--card);padding:8px 12px;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .btn{padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .board-card{background:var(--card);margin-top:12px;border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.06)}
+  .small{font-size:13px;color:var(--muted)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .flex{display:flex;gap:8px;align-items:center}
+  #svgWrap{width:100%;max-width:420px;margin:10px auto;display:block}
+  svg{width:100%;height:auto}
+  .node{cursor:pointer;transition:transform .08s}
+  .node:hover{transform:scale(1.06)}
+  .selected{stroke:#f59e0b; stroke-width:4}
+  .tokenText{font-size:20px;pointer-events:none}
+  .footer{margin-top:12px;text-align:center;color:var(--muted);font-size:13px}
+  @media (max-width:420px){ .tokenText{font-size:18px} }
+</style>
 </head>
 <body>
-  <header>
-    <h1>PlayMancerX — Games</h1>
-    <div class="small">Ludo & 16 Guti</div>
-  </header>
+<header>
+  <div>
+    <h1>শোলো গুটি — PlayMancerX</h1>
+    <div class="small">বাংলা স্টাইল — Demo board + Deposit/Withdraw</div>
+  </div>
+  <div class="topbar">
+    <div class="balance">
+      💰 ব্যালান্স: <strong id="bal">0</strong> টাকা
+    </div>
+    <div class="flex">
+      <button class="btn" id="btnDeposit">Deposit</button>
+      <button class="btn" id="btnWithdraw">Withdraw</button>
+    </div>
+  </div>
+</header>
 
-  <div class="menu">
-    <button id="btn16" class="btn active">♟ 16 Guti</button>
-    <button id="btnLudo" class="btn">🎲 Ludo (Simple)</button>
+<div class="board-card">
+  <div style="text-align:center">
+    <strong>নিয়ম (সরল ডেমো)</strong>
+    <div class="small">পালা পালা গুটি রাখুন / লাফিয়ে খাওয়া (jump capture) করলে প্রতিপক্ষের গুটি চলে যাবে।</div>
   </div>
 
-  <!-- 16 Guti -->
-  <div id="gutiArea" class="card">
-    <div style="text-align:center">
-      <strong>16 Guti — Click an empty cell to place a piece. Alternate turns.</strong>
-      <div id="turnText" class="small" style="margin-top:6px">Player 1's turn (🔴)</div>
+  <div class="controls" style="justify-content:space-between">
+    <div class="small">পালা: <strong id="turnText">Player 1 (লাল)</strong></div>
+    <div style="text-align:right">
+      <button class="btn" id="btnReset">Reset Board</button>
+      <button class="btn" id="btnHelp">Help</button>
     </div>
-    <div id="board" style="margin-top:12px"></div>
-    <div style="margin-top:10px;text-align:center" class="small">Red = Player1, Blue = Player2</div>
   </div>
 
-  <!-- Ludo -->
-  <div id="ludoArea" class="card" style="display:none">
-    <div style="text-align:center">
-      <strong>Simple 2-player Ludo (linear track)</strong>
-      <div class="small" id="ludoStatus">Player 1's turn — roll dice</div>
-    </div>
-
-    <div id="ludo-track"></div>
-
-    <div class="controls">
-      <button id="rollBtn" class="btn">Roll Dice 🎲</button>
-      <div id="diceVal" class="small">Dice: -</div>
-      <div id="activePlayer" class="small">Active: P1</div>
-    </div>
-
-    <div style="margin-top:10px;text-align:center">
-      <div class="small">Each player has 4 tokens. Click a token number to move it after rolling.</div>
-      <div style="margin-top:8px">
-        <button id="showP1" class="btn">P1 Tokens</button>
-        <button id="showP2" class="btn">P2 Tokens</button>
-      </div>
-    </div>
-
-    <div id="tokenArea" style="margin-top:10px;text-align:center"></div>
+  <!-- SVG board -->
+  <div id="svgWrap">
+    <svg id="boardSvg" viewBox="0 0 420 560" xmlns="http://www.w3.org/2000/svg">
+      <!-- Lines and nodes will be drawn by JS -->
+    </svg>
   </div>
 
-  <footer>Made for PlayMancerX • Simple demo version</footer>
+  <div class="small" style="text-align:center;margin-top:8px">লাল = Player1, নীল = Player2 • ডেমো মোড — বাস্তব টাকা নয়</div>
+</div>
+
+<div class="footer">Made for PlayMancerX • Demo only</div>
 
 <script>
-/* --------- Menu toggle --------- */
-const btn16 = document.getElementById('btn16');
-const btnLudo = document.getElementById('btnLudo');
-const gutiArea = document.getElementById('gutiArea');
-const ludoArea = document.getElementById('ludoArea');
+/* ================== Simple local balance (demo) ================== */
+const BAL_KEY = 'pmx_demo_balance';
+function getBal(){ return parseInt(localStorage.getItem(BAL_KEY) || '0'); }
+function setBal(v){ localStorage.setItem(BAL_KEY, String(v)); renderBal(); }
+function renderBal(){ document.getElementById('bal').textContent = getBal(); }
 
-btn16.addEventListener('click', ()=>{ btn16.classList.add('active'); btnLudo.classList.remove('active'); gutiArea.style.display='block'; ludoArea.style.display='none'; })
-btnLudo.addEventListener('click', ()=>{ btnLudo.classList.add('active'); btn16.classList.remove('active'); gutiArea.style.display='none'; ludoArea.style.display='block'; })
-
-/* --------- 16 Guti game (5x5 board, simple turn-based placement) --------- */
-const boardEl = document.getElementById('board');
-const turnText = document.getElementById('turnText');
-let currentPlayer = 1; // 1 or 2
-const cells = [];
-
-function init16() {
-  boardEl.innerHTML = '';
-  cells.length = 0;
-  for (let i=0;i<25;i++){
-    const c = document.createElement('div');
-    c.className='cell';
-    c.dataset.index = i;
-    c.addEventListener('click', gutiClick);
-    boardEl.appendChild(c);
-    cells.push(c);
-  }
-  currentPlayer = 1;
-  updateTurnText();
-}
-function updateTurnText(){
-  turnText.textContent = currentPlayer===1 ? "Player 1's turn (🔴)" : "Player 2's turn (🔵)";
-}
-function gutiClick(e){
-  const c = e.currentTarget;
-  if(c.textContent !== '') return; // already occupied
-  c.textContent = '●';
-  if(currentPlayer===1){
-    c.classList.add('player1');
-    currentPlayer = 2;
-  } else {
-    c.classList.add('player2');
-    currentPlayer = 1;
-  }
-  updateTurnText();
-}
-init16();
-
-/* --------- Ludo (simple linear track) --------- */
-/*
-  Implementation details (simplified):
-  - Two players (P1 red, P2 blue), each 4 tokens.
-  - Track length 20 cells (indexes 0..19). Home tokens start off-track (-1).
-  - Player rolls dice (1..6). Choose one of your tokens to move by dice value.
-  - No capture logic or safe squares for simplicity — if lands on opponent, opponent token returns home.
-  - Basic turn alternation.
-*/
-const TRACK_LEN = 20;
-const ltrack = document.getElementById('ludo-track');
-const rollBtn = document.getElementById('rollBtn');
-const diceVal = document.getElementById('diceVal');
-const activePlayerEl = document.getElementById('activePlayer');
-const ludoStatus = document.getElementById('ludoStatus');
-const tokenArea = document.getElementById('tokenArea');
-const showP1 = document.getElementById('showP1');
-const showP2 = document.getElementById('showP2');
-
-let trackCells = [];
-let p1 = [-1,-1,-1,-1]; // positions (-1 = home)
-let p2 = [-1,-1,-1,-1];
-let lcurrent = 1; // 1 or 2
-let lastRoll = null;
-
-function buildTrack(){
-  ltrack.innerHTML = '';
-  trackCells = [];
-  for(let i=0;i<TRACK_LEN;i++){
-    const el = document.createElement('div');
-    el.className = 'lcell';
-    el.dataset.index = i;
-    ltrack.appendChild(el);
-    trackCells.push(el);
-  }
-  renderTrack();
-}
-
-function renderTrack(){
-  // clear
-  trackCells.forEach(tc=>tc.textContent='');
-  // render p1 tokens
-  p1.forEach((pos,idx)=>{
-    if(pos>=0 && pos<TRACK_LEN){
-      trackCells[pos].innerHTML = `<span class="token t1" title="P1-${idx+1}"></span>`;
-    }
-  });
-  p2.forEach((pos,idx)=>{
-    if(pos>=0 && pos<TRACK_LEN){
-      // if already has P1, show both as small markers (simple)
-      trackCells[pos].innerHTML += `<span class="token t2" style="margin-left:4px" title="P2-${idx+1}"></span>`;
-    }
-  });
-  // update status
-  activePlayerEl.textContent = `Active: P${lcurrent}`;
-  diceVal.textContent = lastRoll ? `Dice: ${lastRoll}` : 'Dice: -';
-}
-
-function rollDice(){
-  lastRoll = Math.floor(Math.random()*6)+1;
-  ludoStatus.textContent = `You rolled ${lastRoll}. Choose a token to move.`;
-  renderTokenButtons();
-  renderTrack();
-}
-
-rollBtn.addEventListener('click', ()=>{
-  rollDice();
+document.getElementById('btnDeposit').addEventListener('click', ()=>{
+  const s = prompt('কত টাকা Deposit করবেন? (সংখ্যায় লিখুন)');
+  const n = parseInt(s);
+  if(!isNaN(n) && n>0){ setBal(getBal() + n); alert(n + ' টাকা Deposit হয়েছে (Demo).'); }
 });
+document.getElementById('btnWithdraw').addEventListener('click', ()=>{
+  const s = prompt('কত টাকা Withdraw করবেন? (সংখ্যায় লিখুন)');
+  const n = parseInt(s);
+  if(isNaN(n) || n<=0){ return; }
+  if(n > getBal()){ alert('ব্যালান্স পর্যাপ্ত নেই!'); return; }
+  setBal(getBal() - n);
+  alert(n + ' টাকা Withdraw হয়েছে (Demo).');
+});
+renderBal();
 
-// prepare token choose UI
-function renderTokenButtons(){
-  tokenArea.innerHTML = '';
-  const arr = lcurrent===1 ? p1 : p2;
-  arr.forEach((pos,idx)=>{
-    const b = document.createElement('button');
-    b.className='btn';
-    b.textContent = `Token ${idx+1} (${pos===-1?'H':'#'+pos})`;
-    b.style.margin = '4px';
-    b.addEventListener('click', ()=> tryMoveToken(idx));
-    tokenArea.appendChild(b);
-  });
+/* ================== Board layout (nodes + edges) ==================
+   We'll create a board that visually matches the image: central 5x5 grid
+   plus triangular extensions top & bottom (so overall node positions ~ 33).
+   Each node has an id, x,y coords (SVG), and adjacency list of connected nodes.
+   Movement allowed only along adjacency lines.
+   Capture (jump): if adjacent node contains opponent and the next node in same direction exists & empty -> jump and capture.
+   This keeps rules simple but faithful.
+================================================================== */
+
+const svg = document.getElementById('boardSvg');
+
+/* Node coordinates (manual layout to resemble image). We'll assign ids 0..N-1
+   Coordinates tuned for viewBox 420x560. Feel free to tweak.
+*/
+const nodes = [
+  // Top small triangle (ids 0..4)
+  {id:0, x:210, y:30},
+  {id:1, x:170, y:70},
+  {id:2, x:210, y:70},
+  {id:3, x:250, y:70},
+  {id:4, x:210, y:110},
+
+  // Upper small connecting row (5..9)
+  {id:5, x:70, y:150},
+  {id:6, x:140, y:150},
+  {id:7, x:210, y:150},
+  {id:8, x:280, y:150},
+  {id:9, x:350, y:150},
+
+  // Middle 5x5 grid (ids 10..34) row-wise
+  {id:10, x:70, y:220},{id:11, x:140, y:220},{id:12, x:210, y:220},{id:13, x:280, y:220},{id:14, x:350, y:220},
+  {id:15, x:70, y:290},{id:16, x:140, y:290},{id:17, x:210, y:290},{id:18, x:280, y:290},{id:19, x:350, y:290},
+  {id:20, x:70, y:360},{id:21, x:140, y:360},{id:22, x:210, y:360},{id:23, x:280, y:360},{id:24, x:350, y:360},
+
+  // Lower small connecting row (25..29)
+  {id:25, x:70, y:430},{id:26, x:140, y:430},{id:27, x:210, y:430},{id:28, x:280, y:430},{id:29, x:350, y:430},
+
+  // Bottom small triangle (30..34)
+  {id:30, x:210, y:480},
+  {id:31, x:170, y:520},
+  {id:32, x:210, y:520},
+  {id:33, x:250, y:520},
+  // Note: we used up to id 33 (34 nodes)
+];
+
+const N = nodes.length;
+
+/* adjacency list (edges) — should match lines in the image.
+   We'll define by ids pairs (undirected). Keep it symmetric.
+*/
+const edgesPairs = [
+  // top triangle
+  [0,1],[0,2],[0,3],[1,2],[2,3],[2,4],
+  // connecting top to main
+  [4,7],
+  [5,6],[6,7],[7,8],[8,9],
+  // left vertical connections to grid
+  [5,10],[6,11],[7,12],[8,13],[9,14],
+  // main 5x5 grid internal edges (horizontal & vertical & diagonals for pattern)
+  [10,11],[11,12],[12,13],[13,14],
+  [15,16],[16,17],[17,18],[18,19],
+  [20,21],[21,22],[22,23],[23,24],
+  [10,15],[15,20],[11,16],[16,21],[12,17],[17,22],[13,18],[18,23],[14,19],[19,24],
+  // some diagonals (to make pattern like image)
+  [10,16],[11,17],[12,18],[13,19],
+  [15,21],[16,22],[17,23],[18,24],
+  // connection to lower row
+  [25,20],[26,21],[27,22],[28,23],[29,24],
+  [25,26],[26,27],[27,28],[28,29],
+  // bottom triangle connection
+  [27,30],[30,31],[30,32],[30,33],[31,32],[32,33]
+];
+
+// Build adjacency map
+const adjacency = {};
+for(const n of nodes) adjacency[n.id] = new Set();
+for(const [a,b] of edgesPairs){
+  adjacency[a].add(b); adjacency[b].add(a);
 }
 
-function tryMoveToken(tokenIdx){
-  if(lastRoll===null){
-    alert('Please roll the dice first.');
+/* state: 0 empty, 1 player1(red), 2 player2(blue) */
+let state = new Array(N).fill(0);
+
+// Initialize starting positions roughly like image: top cluster red, bottom cluster blue
+function initPositions(){
+  state.fill(0);
+  // top region red: ids 0..9 maybe
+  [0,1,2,3,4,5,6,7,8,9].forEach(id=> state[id]=1);
+  // bottom region blue: ids 25..33 maybe
+  [25,26,27,28,29,30,31,32,33].forEach(id=> state[id]=2);
+  // central rows remain empty for movement
+}
+
+/* Render board: draw edges & nodes & tokens */
+function renderBoard(){
+  svg.innerHTML = ''; // clear
+  // draw edges (lines)
+  for(const [a,b] of edgesPairs){
+    const na = nodes.find(x=>x.id===a), nb = nodes.find(x=>x.id===b);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', na.x); line.setAttribute('y1', na.y);
+    line.setAttribute('x2', nb.x); line.setAttribute('y2', nb.y);
+    line.setAttribute('stroke','#7c3aed'); line.setAttribute('stroke-width','2');
+    line.setAttribute('stroke-linecap','round'); svg.appendChild(line);
+  }
+  // draw nodes (circles) on top
+  for(const n of nodes){
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.setAttribute('transform', `translate(${n.x},${n.y})`);
+    g.classList.add('node');
+    g.dataset.id = n.id;
+    // circle
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('r', 16);
+    c.setAttribute('fill','#fff');
+    c.setAttribute('stroke','#cfcfcf');
+    c.setAttribute('stroke-width','3');
+    g.appendChild(c);
+    // token (text or small circle)
+    const val = state[n.id];
+    if(val === 1){
+      const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circ.setAttribute('r',10); circ.setAttribute('fill','#ef4444'); circ.setAttribute('cx',0); circ.setAttribute('cy',0);
+      g.appendChild(circ);
+    } else if(val === 2){
+      const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circ.setAttribute('r',10); circ.setAttribute('fill','#2563eb'); circ.setAttribute('cx',0); circ.setAttribute('cy',0);
+      g.appendChild(circ);
+    }
+    // attach text for accessibility (not visible)
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('y',6); t.setAttribute('class','tokenText'); t.setAttribute('text-anchor','middle');
+    t.textContent = val===0 ? '' : (val===1 ? '●' : '●');
+    t.style.pointerEvents = 'none';
+    g.appendChild(t);
+
+    // click handler
+    g.addEventListener('click', onNodeClick);
+    svg.appendChild(g);
+  }
+  // draw overlay selected if any
+  highlightSelection();
+}
+
+/* Selection and move logic */
+let selected = null; // selected node id (player choosing their piece)
+let currentPlayer = 1; // 1 red, 2 blue
+const turnText = document.getElementById('turnText');
+
+function updateTurnText(){ turnText.textContent = currentPlayer===1 ? 'Player 1 (লাল)' : 'Player 2 (নীল)'; }
+
+function onNodeClick(e){
+  const id = parseInt(e.currentTarget.dataset.id);
+  // if selecting own piece
+  if(state[id] === currentPlayer){
+    selected = id;
+    highlightSelection();
     return;
   }
-  const arr = lcurrent===1 ? p1 : p2;
-  const opp = lcurrent===1 ? p2 : p1;
-
-  // if token at home (-1) and roll > 0 -> put on start square (we use 0 as start)
-  let currPos = arr[tokenIdx];
-  let newPos;
-  if(currPos === -1){
-    // require 1..6 to enter; here allow any roll to enter at position 0 for simplicity
-    newPos = lastRoll - 1; // place nearer based on roll so it moves on enter
-  } else {
-    newPos = currPos + lastRoll;
-  }
-  // wrap
-  if(newPos >= TRACK_LEN) newPos = TRACK_LEN-1; // can't go beyond end
-
-  // if some opponent token is on newPos -> send that token home (simple capture)
-  for(let i=0;i<opp.length;i++){
-    if(opp[i] === newPos){
-      opp[i] = -1; // sent home
+  // else if empty and we have selection -> try move or jump
+  if(state[id] === 0 && selected !== null){
+    const ok = tryMove(selected, id);
+    if(ok){
+      selected = null;
+      renderBoard();
+    } else {
+      // not a valid move
+      alert('সঠিক স্থান নয় - আপনি শুধু সংযুক্ত ঘরে সরতে পারবেন বা লাফ দিয়ে ক্যাপচার করতে পারবেন।');
     }
   }
-  arr[tokenIdx] = newPos;
-  // clear roll
-  lastRoll = null;
-  lcurrent = lcurrent===1 ? 2 : 1;
-  ludoStatus.textContent = `Moved. Now Player ${lcurrent}'s turn.`;
-  renderTokenButtons();
-  renderTrack();
 }
 
-// quick show tokens controls
-showP1.addEventListener('click', ()=>{
-  lcurrent = 1;
-  renderTokenButtons();
-  renderTrack();
-});
-showP2.addEventListener('click', ()=>{
-  lcurrent = 2;
-  renderTokenButtons();
-  renderTrack();
-});
-
-// initialise ludo
-buildTrack();
-renderTokenButtons();
-renderTrack();
-
-/* Optional: expose Telegram.WebApp API if present (no-op if not available) */
-if(window.Telegram && Telegram.WebApp){
-  try{ Telegram.WebApp.expand(); }catch(e){}
+/* Try move from fromId to toId:
+   - If toId is adjacent (in adjacency[from]) and empty -> simple move
+   - Else if toId is exactly two steps in same direction: there exists mid node (adjacent to from and adjacent to to) such that mid occupied by opponent and to empty -> perform jump capture
+*/
+function tryMove(fromId, toId){
+  // adjacency
+  if(adjacency[fromId].has(toId)){
+    // simple adjacent move (only allow moving into empty)
+    if(state[toId] === 0){
+      state[toId] = state[fromId]; state[fromId] = 0;
+      switchPlayer();
+      return true;
+    }
+    return false;
+  }
+  // try jump: find a mid node that is neighbor to both fromId and toId
+  for(const mid of adjacency[fromId]){
+    if(adjacency[mid].has(toId)){
+      // mid is between from and to
+      if(state[mid] === (currentPlayer===1?2:1) && state[toId] === 0){
+        // perform capture
+        state[toId] = state[fromId];
+        state[fromId] = 0;
+        state[mid] = 0; // remove opponent
+        switchPlayer();
+        return true;
+      }
+    }
+  }
+  return false;
 }
+
+function switchPlayer(){
+  currentPlayer = currentPlayer===1 ? 2 : 1;
+  updateTurnText();
+}
+
+/* visual highlight of selected node */
+function highlightSelection(){
+  // clear previous styles
+  const groups = svg.querySelectorAll('g.node');
+  groups.forEach(g=>{
+    g.querySelector('circle').classList.remove('selected');
+    const id = parseInt(g.dataset.id);
+    g.querySelector('circle').setAttribute('stroke','#cfcfcf');
+    g.querySelector('circle').setAttribute('stroke-width','3');
+  });
+  if(selected !== null){
+    const g = svg.querySelector(`g.node[data-id="${selected}"]`);
+    if(g){
+      const circ = g.querySelector('circle');
+      circ.setAttribute('stroke','#f59e0b');
+      circ.setAttribute('stroke-width','4');
+    }
+  }
+}
+
+/* Reset & help */
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(confirm('বারবার Reset করলে খেলা রিসেট হবে — আপনি কি নিশ্চিত?')){ initPositions(); renderBoard(); currentPlayer=1; updateTurnText(); selected=null; }
+});
+document.getElementById('btnHelp').addEventListener('click', ()=>{
+  alert('নিয়ম (সরল ডেমো):\n\n- পালা পালা গুটি সরান।\n- যদি পাশের ঘরে প্রতিপক্ষ থাকে এবং তার বেশি পরের ঘর খালি থাকে, আপনি লাফ দিয়ে (jump) তার গুটি খেলতে পারবেন (capture)।\n- সাধারণ চলন শুধুমাত্র সংযুক্ত নোডগুলোতে।\n\n(এই সংস্করণ একটি সরল ডেমো; সম্পূর্ণ টুর্ন-বেসড/মাল্টিপ্লেয়ার নয়)।');
+});
+
+/* initialize */
+initPositions(); renderBoard(); updateTurnText();
+
+/* make board clickable when window resizes (in case) */
+window.addEventListener('resize', ()=> renderBoard());
 </script>
 </body>
 </html>
