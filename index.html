@@ -1,352 +1,177 @@
 <!doctype html>
-<html lang="bn">
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Crash Game — Demo (No real money)</title>
-  <style>
-    :root{--bg:#0f172a;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--danger:#ef4444}
-    body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial; background:linear-gradient(180deg,#071027 0%, #071a2a 100%); color:#e6eef6; margin:0; padding:24px; box-sizing:border-box}
-    .app{max-width:980px;margin:0 auto;display:grid;grid-template-columns:1fr 360px;gap:20px}
-    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius:12px; padding:16px; box-shadow:0 6px 18px rgba(2,6,23,0.6)}
-    h1{margin:0 0 8px 0;font-size:20px}
-    .panel{display:flex;flex-direction:column;gap:12px}
-    .controls{display:flex;gap:8px;align-items:center}
-    input[type="number"], input[type="text"], select{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:inherit}
-    button{background:var(--accent);border:none;padding:10px 12px;border-radius:10px;color:#022;cursor:pointer;font-weight:600}
-    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
-    .big{font-size:36px;font-weight:700;letter-spacing:1px}
-    .mult{display:flex;align-items:flex-end;gap:12px}
-    .mult .big{color:var(--accent)}
-    .history{max-height:300px;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
-    .row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px;border-radius:8px;background:rgba(0,0,0,0.2)}
-    .meter{height:8px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden}
-    .meter > i{display:block;height:100%;width:0%;background:linear-gradient(90deg, rgba(6,182,212,1), rgba(56,189,248,0.9))}
-    .note{color:var(--muted);font-size:13px}
-    .danger{color:var(--danger);font-weight:700}
-    footer{margin-top:14px;color:var(--muted);font-size:13px}
-    @media (max-width:900px){.app{grid-template-columns:1fr}}
-  </style>
+<meta charset="utf-8">
+<title>Auto Roulette Demo</title>
+<style>
+  body { background:#061021; color:#eee; font-family:Arial, sans-serif; margin:0; padding:20px; }
+  .wheel-container { text-align:center; margin-bottom:20px; }
+  canvas { border-radius:50%; }
+  .pointer { width:0; height:0; border-left:15px solid transparent; border-right:15px solid transparent;
+             border-bottom:30px solid #fff; margin:0 auto; position:relative; top:-10px; }
+  .controls { margin-top:10px; text-align:center; }
+  button { margin:5px; padding:8px 12px; border:0; border-radius:6px; background:#f59e0b; color:#000; cursor:pointer; }
+  .board { display:grid; grid-template-columns:repeat(12,1fr); gap:4px; margin-top:20px; }
+  .num { padding:6px; text-align:center; border-radius:4px; cursor:pointer; }
+  .num.red { background:#e83e3e; }
+  .num.black { background:#111; }
+  .num.green { background:#2ecc71; }
+  #placed { margin-top:10px; min-height:20px; }
+  #history { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
+  .h { width:28px; height:28px; border-radius:50%; display:flex; justify-content:center; align-items:center; font-size:12px; }
+</style>
 </head>
 <body>
-  <div class="app">
-    <div class="card panel">
-      <h1>Crash Game — Demo</h1>
-      <div class="note">শিক্ষামূলক ডেমো — কোনো বাস্তব টাকা নেই।</div>
-
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div class="note">Balance</div>
-          <div class="big" id="balanceDisplay">1000.00</div>
-        </div>
-        <div style="text-align:right">
-          <div class="note">Round</div>
-          <div id="roundDisplay">—</div>
-        </div>
-      </div>
-
-      <div class="card" style="padding:12px">
-        <div class="controls">
-          <label class="note">Bet</label>
-          <input id="betInput" type="number" min="1" step="1" value="10" style="width:100px" />
-          <label class="note">Auto cashout (x)</label>
-          <input id="autoInput" type="number" min="1" step="0.1" value="2" style="width:90px" />
-          <button id="startBtn">Start Round</button>
-          <button id="cashoutBtn" class="secondary" disabled>Cashout</button>
-        </div>
-        <div class="note">Auto-play:
-          <select id="autoplaySelect" style="width:140px">
-            <option value="off">Off</option>
-            <option value="10">10 rounds</option>
-            <option value="50">50 rounds</option>
-            <option value="manual">Manual until stop</option>
-          </select>
-          <button id="stopAuto" class="secondary" style="margin-left:6px" disabled>Stop</button>
-        </div>
-      </div>
-
-      <div class="card" style="padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div class="note">Multiplier</div>
-            <div class="mult">
-              <div class="big" id="multDisplay">1.00x</div>
-              <div class="note" id="statusNote">Waiting</div>
-            </div>
-          </div>
-          <div style="width:240px">
-            <div class="note">Progress</div>
-            <div class="meter"><i id="meterBar"></i></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card" style="padding:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div class="note">Last Result</div>
-            <div id="lastResult">—</div>
-            <div class="note">Wins / Losses</div>
-            <div id="wl">0 / 0</div>
-          </div>
-          <div style="text-align:right">
-            <div class="note">Total Bets</div>
-            <div id="totalBets">0</div>
-            <div class="note">Profit</div>
-            <div id="profit">0.00</div>
-          </div>
-        </div>
-      </div>
-
-      <footer>
-        Demo logic only. Oversimplified RNG for teaching. Don't use for gambling.
-      </footer>
-    </div>
-
-    <div class="card" style="padding:12px">
-      <h1>History</h1>
-      <div class="history" id="historyList"></div>
-    </div>
+  <h2>Auto Roulette (Demo)</h2>
+  <div class="wheel-container">
+    <div class="pointer"></div>
+    <canvas id="wheel" width="400" height="400"></canvas>
   </div>
+  <div class="controls">
+    Balance: <span id="balance"></span> credits
+    <br>
+    <input type="number" id="betAmount" value="10" min="1">
+    <button id="depositBtn">Deposit</button>
+    <button id="withdrawBtn">Withdraw</button>
+    <div>Next spin in <span id="countdown">15</span>s</div>
+  </div>
+  <div class="board" id="board"></div>
+  <div id="placed"></div>
+  <div>Last result: <span id="lastResult">—</span></div>
+  <div id="history"></div>
 
 <script>
-/*
-  Educational Crash Game (front-end only)
-  - No real money / no server. All RNG client-side for demo.
-  - Features: start round, manual cashout, auto-cashout, autoplay, history.
-*/
+const wheel = document.getElementById('wheel');
+const ctx = wheel.getContext('2d');
+const SEGS = 37;
+const REDS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const GREENS = new Set([0]);
+let anglePer = 2*Math.PI/SEGS;
+let rotation = 0;
 
-const balanceEl = document.getElementById('balanceDisplay');
-const betInput = document.getElementById('betInput');
-const autoInput = document.getElementById('autoInput');
-const startBtn = document.getElementById('startBtn');
-const cashoutBtn = document.getElementById('cashoutBtn');
-const multDisplay = document.getElementById('multDisplay');
-const statusNote = document.getElementById('statusNote');
-const meterBar = document.getElementById('meterBar');
-const historyList = document.getElementById('historyList');
-const roundDisplay = document.getElementById('roundDisplay');
-const lastResult = document.getElementById('lastResult');
-const wl = document.getElementById('wl');
-const totalBetsEl = document.getElementById('totalBets');
-const profitEl = document.getElementById('profit');
-const autoplaySelect = document.getElementById('autoplaySelect');
-const stopAutoBtn = document.getElementById('stopAuto');
+let balance = Number(localStorage.getItem('roulette_balance')||1000);
+let bets = [];
+let countdown = 15;
+let spinning = false;
+let history = [];
 
-let balance = 1000.0;
-let round = 0;
-let running = false;
-let currentMultiplier = 1.0;
-let crashPoint = null;
-let stepInterval = null;
-let betsTotal = 0;
-let wins = 0, losses = 0;
-let profit = 0;
-let autoplayMode = false;
-let autoplayRemaining = 0;
-
-function fmt(n){ return Number(n).toFixed(2); }
-function setBalance(v){ balance = v; balanceEl.textContent = fmt(balance); }
-
-setBalance(balance);
-
-// RNG for crash point — biased so small multipliers more likely.
-// This is a simple demo distribution using inverse-exponential transform.
-function generateCrashPoint() {
-  // choose base randomness
-  const r = Math.random(); // 0..1
-  // tweak to get reasonable distribution: min 1.0, long tail
-  const min = 1.0;
-  const max = 100; // clamp max for UI sanity
-  // transform: heavy tail
-  let x = Math.max(min, Math.floor((1 / (1 - r)) * 100) / 100);
-  if (x > max) x = max;
-  // introduce occasional very small crashes
-  if (Math.random() < 0.05) x = 1 + Math.random() * 0.5;
-  return x;
-}
-
-function startRound() {
-  if (running) return;
-  const bet = Number(betInput.value);
-  if (!bet || bet <= 0) { alert('সঠিক বেট বসাও'); return; }
-  if (bet > balance) { alert('Balance এ পর্যাপ্ত টাকা নেই'); return; }
-
-  // initialize
-  running = true;
-  currentMultiplier = 1.0;
-  multDisplay.textContent = currentMultiplier.toFixed(2) + 'x';
-  meterBar.style.width = '0%';
-  statusNote.textContent = 'Running…';
-  round++;
-  roundDisplay.textContent = round;
-  crashPoint = generateCrashPoint();
-  // deduct bet immediately (typical behavior)
-  balance -= bet;
-  setBalance(balance);
-  betsTotal++;
-  totalBetsEl.textContent = betsTotal;
-
-  // enable cashout button
-  cashoutBtn.disabled = false;
-  startBtn.disabled = true;
-
-  // animation speed and step size can be tuned
-  let speed = 60; // ms per step
-  let accel = 1.01; // multiplier growth factor per step (slower -> closer to real feel)
-  const autoCashout = Number(autoInput.value) || null;
-
-  stepInterval = setInterval(() => {
-    // grow multiplier multiplicatively for smoother curve
-    currentMultiplier = currentMultiplier * accel;
-    // small linear bump for feel
-    currentMultiplier += 0.01;
-
-    // update UI
-    multDisplay.textContent = currentMultiplier.toFixed(2) + 'x';
-    // map multiplier to progress bar (log scale for nicer UI)
-    const progress = Math.min(100, Math.log(currentMultiplier + 1) / Math.log(100 + 1) * 100);
-    meterBar.style.width = progress + '%';
-
-    // auto-cashout check
-    if (autoCashout && currentMultiplier >= autoCashout) {
-      doCashout(bet, autoCashout, true);
-      return;
-    }
-
-    // crash check: if currentMultiplier >= crashPoint -> crash
-    if (currentMultiplier >= crashPoint) {
-      // crashed — player loses bet (already deducted)
-      clearInterval(stepInterval);
-      running = false;
-      startBtn.disabled = false;
-      cashoutBtn.disabled = true;
-      statusNote.textContent = 'Crashed 😵';
-      lastResult.textContent = `Crashed @ ${crashPoint.toFixed(2)}x — Lost ${fmt(bet)}`;
-      losses++;
-      wl.textContent = wins + ' / ' + losses;
-      historyAdd({round, bet, result: 0, crash: crashPoint});
-      profit = profit - bet;
-      profitEl.textContent = fmt(profit);
-      stopAutoIfNeeded();
-    }
-
-    // slightly increase accel over time to simulate speed-up
-    accel *= 1.0008;
-  }, speed);
-}
-
-function doCashout(bet, atMultiplier=null, isAuto=false) {
-  if (!running) return;
-  // calculate winnings
-  const m = (atMultiplier !== null) ? atMultiplier : currentMultiplier;
-  const winnings = bet * m;
-  clearInterval(stepInterval);
-  running = false;
-  startBtn.disabled = false;
-  cashoutBtn.disabled = true;
-  // credit winnings to balance (bet was deducted earlier)
-  balance += winnings;
-  setBalance(balance);
-  statusNote.textContent = 'Cashed out ✅';
-  lastResult.textContent = `Cashed out @ ${m.toFixed(2)}x — Won ${fmt(winnings)}`;
-  wins++;
-  wl.textContent = wins + ' / ' + losses;
-  historyAdd({round, bet, result: winnings, cashedAt: m, auto: isAuto});
-  profit = profit + (winnings - bet);
-  profitEl.textContent = fmt(profit);
-  stopAutoIfNeeded();
-}
-
-function historyAdd(obj) {
-  const el = document.createElement('div');
-  el.className = 'row';
-  if (obj.result > 0) {
-    el.innerHTML = `<div>Round ${obj.round} — Bet ${fmt(obj.bet)} — <strong>Win ${fmt(obj.result)}</strong></div><div>${obj.cashedAt ? fmt(obj.cashedAt)+'x' : ''}</div>`;
-  } else {
-    el.innerHTML = `<div>Round ${obj.round} — Bet ${fmt(obj.bet)} — <span class="danger">Crashed</span></div><div>${fmt(obj.crash)}x</div>`;
+function drawWheel(rot=0){
+  let cx=200, cy=200, r=190;
+  ctx.clearRect(0,0,400,400);
+  for(let i=0;i<SEGS;i++){
+    let start=rot + i*anglePer;
+    let end=start+anglePer;
+    let color= GREENS.has(i)?'#2ecc71': (REDS.has(i)?'#e83e3e':'#111');
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,end);
+    ctx.fillStyle=color;
+    ctx.fill();
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(start+anglePer/2);
+    ctx.fillStyle='#fff';
+    ctx.textAlign='right';
+    ctx.fillText(i,r-10,5);
+    ctx.restore();
   }
-  historyList.prepend(el);
 }
 
-// event bindings
-startBtn.addEventListener('click', () => {
-  startRound();
-});
+function updateBalance(){ 
+  localStorage.setItem('roulette_balance',balance); 
+  document.getElementById('balance').textContent=balance; 
+}
 
-cashoutBtn.addEventListener('click', () => {
-  const bet = Number(betInput.value) || 0;
-  // manual cashout at current multiplier
-  doCashout(bet, currentMultiplier, false);
-});
-
-autoplaySelect.addEventListener('change', () => {
-  const v = autoplaySelect.value;
-  if (v === 'off') { autoplayMode = false; stopAutoBtn.disabled = true; return; }
-  autoplayMode = true;
-  stopAutoBtn.disabled = false;
-  if (v === 'manual') {
-    autoplayRemaining = Infinity;
-  } else {
-    autoplayRemaining = Number(v);
+function spin(){
+  if(spinning) return;
+  spinning=true;
+  let result = Math.floor(Math.random()*SEGS);
+  let targetAngle = 2*Math.PI*(result/SEGS);
+  rotation = rotation + (10*Math.PI) + targetAngle; // spin + land
+  let duration = 5000;
+  let start=null;
+  function animate(ts){
+    if(!start) start=ts;
+    let p=(ts-start)/duration;
+    if(p>1)p=1;
+    let current = rotation*p;
+    drawWheel(current);
+    if(p<1) requestAnimationFrame(animate);
+    else {
+      spinning=false;
+      settle(result);
+    }
   }
-  // start autoplay loop if not running
-  if (!running) autoplayLoop();
-});
+  requestAnimationFrame(animate);
+}
 
-stopAutoBtn.addEventListener('click', () => {
-  autoplayMode = false;
-  autoplayRemaining = 0;
-  stopAutoBtn.disabled = true;
-  autoplaySelect.value = 'off';
-});
-
-// autoplayer: starts round, waits end, optionally cashes out if autoInput set
-async function autoplayLoop() {
-  if (!autoplayMode || autoplayRemaining === 0 || balance <= 0) return;
-  // start new round
-  startRound();
-  // wait until running becomes false (round ended)
-  await new Promise(resolve => {
-    const check = setInterval(() => {
-      if (!running) { clearInterval(check); resolve(); }
-    }, 50);
+function settle(result){
+  document.getElementById('lastResult').textContent=result;
+  history.unshift(result);
+  if(history.length>12)history.pop();
+  let hEl=document.getElementById('history');hEl.innerHTML='';
+  history.forEach(n=>{
+    let d=document.createElement('div');
+    d.className='h';
+    d.style.background= GREENS.has(n)?'#2ecc71': (REDS.has(n)?'#e83e3e':'#111');
+    d.textContent=n; hEl.appendChild(d);
   });
-  // decrement counter if finite
-  if (isFinite(autoplayRemaining)) autoplayRemaining--;
-  // small delay between rounds
-  setTimeout(() => {
-    if (autoplayMode && autoplayRemaining !== 0 && balance > 0) {
-      autoplayLoop();
-    } else {
-      autoplayMode = false;
-      autoplaySelect.value = 'off';
-      stopAutoBtn.disabled = true;
+  // payout
+  bets.forEach(b=>{
+    if(b.num===result){
+      balance+=b.amount*36;
     }
-  }, 300);
+  });
+  bets=[];
+  document.getElementById('placed').textContent='';
+  updateBalance();
 }
 
-function stopAutoIfNeeded() {
-  if (!autoplayMode) return;
-  if (autoplayRemaining === Infinity) {
-    // keep going
-    setTimeout(autoplayLoop, 300);
-  } else if (autoplayRemaining > 0) {
-    setTimeout(autoplayLoop, 300);
-  } else {
-    autoplayMode = false;
-    autoplaySelect.value = 'off';
-    stopAutoBtn.disabled = true;
+function makeBoard(){
+  let b=document.getElementById('board');
+  for(let i=0;i<SEGS;i++){
+    let d=document.createElement('div');
+    d.className='num';
+    if(GREENS.has(i)) d.classList.add('green');
+    else if(REDS.has(i)) d.classList.add('red');
+    else d.classList.add('black');
+    d.textContent=i;
+    d.onclick=()=>{
+      let amt=Number(document.getElementById('betAmount').value);
+      if(amt>0 && balance>=amt){
+        balance-=amt;
+        bets.push({num:i,amount:amt});
+        document.getElementById('placed').textContent+=`Bet ${amt} on ${i}. `;
+        updateBalance();
+      }
+    }
+    b.appendChild(d);
   }
 }
 
-// disallow leaving running round accidentally
-window.addEventListener('beforeunload', (e) => {
-  if (running) {
-    e.preventDefault();
-    e.returnValue = '';
+function loopCountdown(){
+  countdown--;
+  if(countdown<=0){
+    countdown=15;
+    spin();
   }
-});
+  document.getElementById('countdown').textContent=countdown;
+}
+setInterval(loopCountdown,1000);
+
+document.getElementById('depositBtn').onclick=()=>{
+  let amt=Number(prompt('Deposit amount','1000'));
+  if(amt>0){ balance+=amt; updateBalance(); }
+}
+document.getElementById('withdrawBtn').onclick=()=>{
+  let amt=Number(prompt('Withdraw amount','100'));
+  if(amt>0 && amt<=balance){ balance-=amt; updateBalance(); }
+}
+
+makeBoard();
+updateBalance();
+drawWheel();
 </script>
 </body>
 </html>
