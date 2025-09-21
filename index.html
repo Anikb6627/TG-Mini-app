@@ -1,491 +1,551 @@
-Flask==2.3.3
-werkzeug==2.3.7
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  balance INTEGER NOT NULL DEFAULT 1000
-);
-
-CREATE TABLE spins (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  result INTEGER,
-  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(user_id) REFERENCES users(id)
-);
-import os
-import sqlite3
-from flask import Flask, g, render_template, request, redirect, url_for, session, flash, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
-
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, 'roulette.db')
-
-app = Flask(__name__)
-# CHANGE THIS secret key in production (keep private)
-app.secret_key = os.environ.get('RDL_SECRET', 'CHANGE_THIS_TO_A_RANDOM_SECRET')
-
-# --- DB helpers ---
-def get_db():
-    db = getattr(g, '_database', None)
-    if db is None:
-        db = g._database = sqlite3.connect(DB_PATH)
-        db.row_factory = sqlite3.Row
-    return db
-
-@app.teardown_appcontext
-def close_db(exc):
-    db = getattr(g, '_database', None)
-    if db is not None:
-        db.close()
-
-def query_db(query, args=(), one=False):
-    cur = get_db().execute(query, args)
-    rv = cur.fetchall()
-    cur.close()
-    return (rv[0] if rv else None) if one else rv
-
-def init_db():
-    if not os.path.exists(DB_PATH):
-        with app.app_context():
-            db = get_db()
-            schema_path = os.path.join(BASE_DIR, 'schema.sql')
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                db.executescript(f.read())
-            db.commit()
-
-init_db()
-
-# --- Auth routes ---
-@app.route('/register', methods=['GET','POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username','').strip()
-        password = request.form.get('password','')
-        if not username or not password:
-            flash('Username and password required')
-            return redirect(url_for('register'))
-        pw_hash = generate_password_hash(password)
-        try:
-            db = get_db()
-            db.execute('INSERT INTO users (username, password_hash, balance) VALUES (?, ?, ?)',
-                       (username, pw_hash, 1000))
-            db.commit()
-            flash('Registered. Please log in.')
-            return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Username already taken')
-            return redirect(url_for('register'))
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET','POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username','').strip()
-        password = request.form.get('password','')
-        user = query_db('SELECT * FROM users WHERE username = ?', (username,), one=True)
-        if user and check_password_hash(user['password_hash'], password):
-            session['user_id'] = user['id']
-            session['username'] = user['username']
-            return redirect(url_for('index'))
-        flash('Invalid credentials')
-        return redirect(url_for('login'))
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-# --- Main routes ---
-@app.route('/')
-def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    user = query_db('SELECT * FROM users WHERE id = ?', (session['user_id'],), one=True)
-    spins = query_db('SELECT * FROM spins WHERE user_id = ? ORDER BY timestamp DESC LIMIT 50', (user['id'],))
-    return render_template('index.html', user=user, spins=spins)
-
-# API: record spin
-@app.route('/api/spin', methods=['POST'])
-def api_spin():
-    if 'user_id' not in session:
-        return jsonify({'error':'not_logged_in'}), 403
-    data = request.get_json() or {}
-    result = data.get('result')
-    try:
-        result = int(result)
-    except Exception:
-        return jsonify({'error':'invalid_result'}), 400
-    if result < 0 or result > 36:
-        return jsonify({'error':'invalid_result'}), 400
-    db = get_db()
-    db.execute('INSERT INTO spins (user_id, result) VALUES (?, ?)', (session['user_id'], result))
-    db.commit()
-    return jsonify({'ok': True, 'result': result})
-
-# Demo deposit/withdraw — DEMO ONLY (no real payment)
-@app.route('/deposit', methods=['POST'])
-def deposit():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    try:
-        amt = int(request.form.get('amount', 0))
-    except:
-        amt = 0
-    if amt <= 0:
-        flash('Enter a valid amount')
-        return redirect(url_for('index'))
-    db = get_db()
-    db.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (amt, session['user_id']))
-    db.commit()
-    flash(f'Deposited {amt} DEMO Tk')
-    return redirect(url_for('index'))
-
-@app.route('/withdraw', methods=['POST'])
-def withdraw():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    try:
-        amt = int(request.form.get('amount', 0))
-    except:
-        amt = 0
-    user = query_db('SELECT balance FROM users WHERE id = ?', (session['user_id'],), one=True)
-    if amt <= 0 or amt > user['balance']:
-        flash('Invalid withdraw amount')
-        return redirect(url_for('index'))
-    db = get_db()
-    db.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amt, session['user_id']))
-    db.commit()
-    flash(f'Withdrew {amt} DEMO Tk')
-    return redirect(url_for('index'))
-
-# Health check / placeholder for payment callbacks (DO NOT implement live without legal review)
-@app.route('/payment_callback', methods=['POST'])
-def payment_callback():
-    return 'OK', 200
-
-if __name__ == '__main__':
-    # debug True for dev only
-    app.run(debug=True)
-      <!doctype html>
-<html lang="bn">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Roulette Demo</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand">Roulette Demo</div>
-    <div class="userinfo">
-      {% if session.username %}
-        Hello <strong>{{ session.username }}</strong> |
-        Balance: <strong>{{ user.balance }}</strong> DEMO Tk
-        <a class="link" href="{{ url_for('logout') }}">Logout</a>
-      {% endif %}
-    </div>
-  </header>
-  <main class="container">
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash">
-          {% for m in messages %}<div>{{ m }}</div>{% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
-  </main>
-
-  <script>
-    window.appConfig = {
-      apiSpinUrl: "{{ url_for('api_spin') }}",
-      autoInterval: 15
-    };
-  </script>
-  <script src="{{ url_for('static', filename='wheel.js') }}"></script>
-</body>
-</html>
-{% extends "base.html" %}
-{% block content %}
-<div class="layout">
-  <section class="maincard">
-    <div class="wheel-wrap">
-      <div class="pointer"></div>
-      <div id="rotator">
-        <canvas id="wheel" width="540" height="540"></canvas>
-      </div>
-    </div>
-
-    <div class="controls">
-      <button id="spinNow">Spin Now</button>
-      <button id="toggleAuto">Auto: ON</button>
-      <button id="clearHistory">Clear Local History</button>
-      <div class="countdown" id="countdown">Next in: 15s</div>
-    </div>
-
-    <div class="result-row">
-      <div class="big-result" id="lastResult">—</div>
-      <div class="small-note">Last spin result</div>
-    </div>
-  </section>
-
-  <aside class="sidebar">
-    <div class="card">
-      <h3>Demo Wallet</h3>
-      <form method="post" action="{{ url_for('deposit') }}" class="form-inline">
-        <input name="amount" type="number" min="1" value="100" required>
-        <button type="submit">Deposit DEMO</button>
-      </form>
-
-      <form method="post" action="{{ url_for('withdraw') }}" class="form-inline">
-        <input name="amount" type="number" min="1" value="100" required>
-        <button type="submit">Withdraw DEMO</button>
-      </form>
-    </div>
-
-    <div class="card">
-      <h3>Recent Spins (server)</h3>
-      <div class="history" id="serverHistory">
-        {% for s in spins %}
-          <div class="hist-row">#{{ s.result }} — {{ s.timestamp }}</div>
-        {% else %}
-          <div>No spins yet</div>
-        {% endfor %}
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Local History</h3>
-      <div class="history" id="localHistory"></div>
-    </div>
-  </aside>
-</div>
-{% endblock %}
-      <!doctype html>
-<html lang="bn">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Login — Roulette Demo</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body class="authpage">
-  <div class="authbox">
-    <h2>Login</h2>
-    <form method="post" action="{{ url_for('login') }}">
-      <label>Username</label>
-      <input name="username" required>
-      <label>Password</label>
-      <input name="password" type="password" required>
-      <button type="submit">Login</button>
-    </form>
-    <p>Don't have account? <a href="{{ url_for('register') }}">Register</a></p>
-  </div>
-</body>
-</html>
 <!doctype html>
 <html lang="bn">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Register — Roulette Demo</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Demo Roulette (HTML)</title>
+<style>
+  :root{
+    --bg:#0b1020;
+    --card:#0f1724;
+    --accent:#eab308;
+    --muted:#9aa4b2;
+    --green:#16a34a;
+    --red:#dc2626;
+  }
+  body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#071022 0%, #081427 100%);color:#e6eef8;display:flex;align-items:flex-start;justify-content:center;min-height:100vh;padding:20px;}
+  .app{width:1100px;max-width:100%;display:grid;grid-template-columns:520px 1fr;gap:18px;}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03);}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  header h1{font-size:18px;margin:0}
+  .balance{font-weight:700;color:var(--accent);}
+  .small{color:var(--muted);font-size:13px}
+  .wheel-area{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px;}
+  .wheel-wrap{position:relative;width:420px;height:420px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  .wheel{position:absolute;width:100%;height:100%;border-radius:50%;overflow:hidden;transform:rotate(0deg);transition:transform 6s cubic-bezier(.18,.83,.29,1);}
+  .segment{position:absolute;left:50%;top:50%;transform-origin:0 0;display:flex;align-items:center;justify-content:flex-start}
+  .segment .label{width:160px;text-align:center;font-weight:700;transform:translateX(10px) rotate(0deg);font-size:14px;color:#fff; text-shadow:0 1px 0 rgba(0,0,0,0.6)}
+  .ball{position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,0.6);right:calc(50% - 9px);top:8px;transform-origin:50% 190px;transition:transform 6s cubic-bezier(.18,.83,.29,1);pointer-events:none;}
+  .pointer{position:absolute;top:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:22px solid var(--accent);filter:drop-shadow(0 2px 6px rgba(0,0,0,.6));z-index:30}
+  .center{position:absolute;width:160px;height:160px;border-radius:50%;background:linear-gradient(180deg,#071627,#0b2636);display:flex;align-items:center;justify-content:center;z-index:20;border:6px solid rgba(255,255,255,0.03)}
+  .result-big{font-size:28px;font-weight:800}
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .btn{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
+  .btn:active{transform:translateY(1px)}
+  .bets-area{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .num-cell{width:46px;height:46px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,0.03);font-weight:700}
+  .num-cell[data-num="0"]{background:#2b2b2b;color:#fff}
+  .num-cell.red{background:#c62828;color:#fff}
+  .num-cell.black{background:#111827;color:#fff}
+  .sidebar{display:flex;flex-direction:column;gap:12px}
+  .panel{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border:1px solid rgba(255,255,255,0.02)}
+  label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  input[type="range"]{width:100%}
+  .stake-row{display:flex;gap:8px;align-items:center}
+  .money{font-weight:800;color:var(--accent);font-size:18px}
+  .history{max-height:180px;overflow:auto;padding-right:6px}
+  .bets-list{max-height:140px;overflow:auto;padding-right:6px}
+  .log-item{font-size:13px;padding:6px;border-bottom:1px dashed rgba(255,255,255,0.02)}
+  .footer-note{font-size:12px;color:var(--muted)}
+  .topbar{display:flex;gap:8px;align-items:center}
+  .input{background:transparent;border:1px solid rgba(255,255,255,0.03);padding:8px;border-radius:6px;color:inherit;width:100%}
+  .stats-row{display:flex;gap:8px;justify-content:space-between;margin-top:6px}
+  .sim-players{font-size:13px;color:var(--muted)}
+  .bet-marker{position:absolute;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;z-index:25;box-shadow:0 2px 6px rgba(0,0,0,0.5)}
+  .marker-player{background:#ffd166}
+  .marker-you{background:#60a5fa}
+  .withdraw-btn{background:linear-gradient(90deg,#ef4444,#f97316);color:white;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+  footer{margin-top:10px;text-align:center;color:var(--muted);font-size:12px}
+  @media(max-width:980px){.app{grid-template-columns:1fr}}
+</style>
 </head>
-<body class="authpage">
-  <div class="authbox">
-    <h2>Register</h2>
-    <form method="post" action="{{ url_for('register') }}">
-      <label>Username</label>
-      <input name="username" required>
-      <label>Password</label>
-      <input name="password" type="password" required>
-      <button type="submit">Register</button>
-    </form>
-    <p>Have an account? <a href="{{ url_for('login') }}">Login</a></p>
+<body>
+<div class="app">
+  <div class="card">
+    <header>
+      <div>
+        <h1>Demo Roulette — 0–36 (Straight bets)</h1>
+        <div class="small">Automatic round every <span id="roundInterval">15</span>s · Payout straight: <strong>35:1</strong></div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">Demo Balance</div>
+        <div class="balance money" id="balance">৳ 10,000</div>
+      </div>
+    </header>
+
+    <div class="wheel-area">
+      <div class="pointer" title="Result pointer"></div>
+      <div class="wheel-wrap">
+        <div id="wheel" class="wheel"></div>
+        <div id="ball" class="ball" title="ball"></div>
+        <div class="center">
+          <div style="text-align:center">
+            <div class="small">Last result</div>
+            <div class="result-big" id="lastResult">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div style="min-width:260px">
+          <label>Stake (৳) — select between 10 and 1000</label>
+          <div class="stake-row">
+            <input id="stakeRange" type="range" min="10" max="1000" step="10" value="50">
+            <div style="width:86px;text-align:center" class="money" id="stakeVal">৳ 50</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="autoSpinBtn" class="btn">Auto ON</button>
+          <button id="spinNow" class="btn">Spin Now</button>
+          <button id="clearBets" class="btn">Clear Bets</button>
+        </div>
+      </div>
+
+      <div class="bets-area" id="betGrid" style="margin-top:8px"></div>
+
+      <div style="width:100%;display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div class="small">Click a number to place your current stake as a straight bet.</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="depositAmt" class="input" placeholder="Deposit amount (demo)" />
+          <button id="depositBtn" class="btn">Deposit</button>
+          <button id="withdrawBtn" class="withdraw-btn">Withdraw</button>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:8px">Simulated players will also bet each round so you can see where people bet.</div>
+    </div>
   </div>
+
+  <div class="sidebar">
+    <div class="panel">
+      <label>Your Bets</label>
+      <div class="bets-list" id="yourBetsList">
+        <div class="small">No bets yet</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div class="small">Total Bet:</div><div class="money" id="totalBet">৳ 0</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label>Round / Timer</label>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:28px;font-weight:800" id="timer">15</div>
+        <div style="font-size:13px;color:var(--muted)">seconds left</div>
+      </div>
+      <div class="stats-row" style="margin-top:10px">
+        <div class="small">Round # <span id="roundNo">0</span></div>
+        <div class="small">Players (sim): <span id="simCount">0</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label>Bet Log & Game History</label>
+      <div class="history" id="historyLog">
+        <div class="small">Game history appears here.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <label>Notes</label>
+      <div class="footer-note">
+        - Straight-number payout 35:1 (example: stake 10 → win +350).<br>
+        - Bets lock when wheel is spinning. <br>
+        - This is a demo/simulation only — no real money.<br>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>Made for demo — copy-paste the single HTML file to run locally.</footer>
+
+<script>
+(() => {
+  // Basic state
+  let balance = 10000;
+  let stake = 50;
+  const minStake = 10, maxStake = 1000;
+  let yourBets = []; // {num, stake}
+  let round = 0;
+  let timer = 15;
+  const roundIntervalSec = 15;
+  let autoOn = true;
+  let countdownInterval = null;
+  let spinning = false;
+
+  // roulette wheel order (European/Single-zero common order)
+  const wheelOrder = [0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
+  const N = wheelOrder.length; // 37
+
+  // DOM refs
+  const balanceEl = document.getElementById('balance');
+  const stakeRange = document.getElementById('stakeRange');
+  const stakeVal = document.getElementById('stakeVal');
+  const betGrid = document.getElementById('betGrid');
+  const yourBetsList = document.getElementById('yourBetsList');
+  const totalBetEl = document.getElementById('totalBet');
+  const timerEl = document.getElementById('timer');
+  const lastResultEl = document.getElementById('lastResult');
+  const wheelEl = document.getElementById('wheel');
+  const ballEl = document.getElementById('ball');
+  const roundNoEl = document.getElementById('roundNo');
+  const historyLog = document.getElementById('historyLog');
+  const simCountEl = document.getElementById('simCount');
+  const autoSpinBtn = document.getElementById('autoSpinBtn');
+  const spinNow = document.getElementById('spinNow');
+  const clearBets = document.getElementById('clearBets');
+  const depositBtn = document.getElementById('depositBtn');
+  const depositAmt = document.getElementById('depositAmt');
+  const withdrawBtn = document.getElementById('withdrawBtn');
+
+  // initial render
+  function formatMoney(x){ return '৳ ' + x.toLocaleString(); }
+  function updateBalance(){ balanceEl.textContent = formatMoney(balance); }
+  function updateStakeUI(){ stakeVal.textContent = formatMoney(stake); stakeRange.value = stake; }
+  updateBalance();
+  updateStakeUI();
+
+  // Build wheel segments
+  function buildWheel(){
+    wheelEl.innerHTML = '';
+    const angle = 360 / N;
+    for(let i=0;i<N;i++){
+      const num = wheelOrder[i];
+      const seg = document.createElement('div');
+      seg.className = 'segment';
+      seg.style.transform = `rotate(${i*angle}deg) translate(-50%,-50%)`;
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = num;
+      // color style: zero special, else red/black by standard roulette pattern (we'll use a set)
+      const redNumbers = new Set([32,19,21,25,34,27,36,30,23,5,16,1,14,9,18,7,12,3]);
+      if(num === 0) label.style.color = '#d1d5db';
+      else if(redNumbers.has(num)) {
+        label.classList.add('red');
+        label.style.color = '#fff';
+        label.parentColor = 'red';
+        label.style.background = '#c62828';
+        label.style.padding = '6px 10px';
+        label.style.borderRadius = '6px';
+      } else {
+        label.classList.add('black');
+        label.style.color = '#fff';
+        label.style.background = '#111827';
+        label.style.padding = '6px 10px';
+        label.style.borderRadius = '6px';
+      }
+      seg.appendChild(label);
+      // position label inside segment
+      wheelEl.appendChild(seg);
+    }
+  }
+  buildWheel();
+
+  // Build bet grid (clickable numbers)
+  function buildBetGrid(){
+    betGrid.innerHTML = '';
+    for(let i=0;i<N;i++){
+      const num = wheelOrder[i];
+      const cell = document.createElement('div');
+      cell.className = 'num-cell';
+      cell.dataset-num = num;
+      cell.textContent = num;
+      // color
+      const redNumbers = new Set([32,19,21,25,34,27,36,30,23,5,16,1,14,9,18,7,12,3]);
+      if(num===0) cell.style.background='#2b2b2b';
+      else if(redNumbers.has(num)) cell.classList.add('red');
+      else cell.classList.add('black');
+      // click to place bet
+      cell.addEventListener('click',()=>{
+        placeBet(num, stake, 'you');
+      });
+      betGrid.appendChild(cell);
+    }
+  }
+  buildBetGrid();
+
+  // Bet storage & UI
+  function placeBet(num, amt, who='you'){
+    if(spinning) return alert('Round already spinning. Wait for next round.');
+    if(who==='you'){
+      if(amt < minStake || amt > maxStake) return alert(`Stake must be between ${minStake} and ${maxStake}`);
+      if(amt > balance) return alert('Insufficient demo balance.');
+      balance -= amt;
+      updateBalance();
+      yourBets.push({num, stake: amt});
+      addBetMarker(num, 'you', amt);
+      renderYourBets();
+    } else {
+      // simulated player, we don't touch your balance
+      addBetMarker(num, 'player', amt);
+      // display in log
+      log(`${who} bet ৳${amt} on ${num}`);
+    }
+  }
+
+  function renderYourBets(){
+    yourBetsList.innerHTML = '';
+    if(yourBets.length===0){
+      yourBetsList.innerHTML = '<div class="small">No bets yet</div>';
+      totalBetEl.textContent = formatMoney(0);
+      return;
+    }
+    let tot = 0;
+    yourBets.forEach((b,i)=>{
+      const d = document.createElement('div');
+      d.className = 'log-item';
+      d.textContent = `#${i+1} — ৳${b.stake} on ${b.num}`;
+      yourBetsList.appendChild(d);
+      tot += b.stake;
+    });
+    totalBetEl.textContent = formatMoney(tot);
+  }
+
+  function clearYourBets(){
+    if(spinning) return alert('Bets locked while spinning.');
+    // refund bets to player
+    const refund = yourBets.reduce((s,b)=>s+b.stake,0);
+    balance += refund;
+    yourBets = [];
+    updateBalance();
+    renderYourBets();
+    removeAllMarkers();
+  }
+
+  // markers: small circles showing bets on wheel numbers
+  const markers = [];
+  function addBetMarker(num, who='player', amt=0){
+    // find index position of number on wheel
+    const idx = wheelOrder.indexOf(Number(num));
+    if(idx === -1) return;
+    // compute angle for label
+    const angle = (360 / N) * idx;
+    // position: using trigonometry around radius
+    const centerX = 210, centerY = 210, radius = 150;
+    const rad = (angle - 90) * (Math.PI/180); // adjust so top=0
+    const x = centerX + radius * Math.cos(rad) - 9;
+    const y = centerY + radius * Math.sin(rad) - 9;
+    const m = document.createElement('div');
+    m.className = 'bet-marker ' + (who==='you' ? 'marker-you' : 'marker-player');
+    m.style.left = x + 'px';
+    m.style.top = y + 'px';
+    m.textContent = amt>0 ? Math.min(99,amt) : (who==='you' ? 'Y' : 'P'); // small label
+    m.dataset.num = num;
+    wheelEl.parentElement.appendChild(m);
+    markers.push(m);
+    // auto-remove after round end handled elsewhere
+  }
+  function removeAllMarkers(){
+    markers.forEach(m => m.remove());
+    markers.length = 0;
+  }
+
+  // log & history
+  function log(txt){
+    const d = document.createElement('div');
+    d.className = 'log-item';
+    const t = new Date().toLocaleTimeString();
+    d.textContent = `[${t}] ${txt}`;
+    historyLog.prepend(d);
+    // cap
+    const items = historyLog.querySelectorAll('.log-item');
+    if(items.length > 120) items[items.length-1].remove();
+  }
+
+  // spin mechanics
+  function getRandomResult(){
+    // uniformly choose an index
+    const idx = Math.floor(Math.random()*N);
+    return {idx, num: wheelOrder[idx]};
+  }
+
+  function performSpin(manual=false){
+    if(spinning) return;
+    spinning = true;
+    round += 1;
+    roundNoEl.textContent = round;
+    // simulate some players placing random bets before spin
+    simulatePlayers();
+
+    // determine result
+    const res = getRandomResult();
+    const idx = res.idx;
+    const num = res.num;
+
+    log(`Round ${round} — spinning...`);
+
+    // compute wheel rotation so chosen index lands at pointer (pointer at top)
+    // segments are arranged with index 0 at 0deg. To bring index i to top, rotate by -(i * angle)
+    const angle = 360 / N;
+    const spins = 8 + Math.floor(Math.random()*6); // number of full spins for realism
+    const finalRotation = spins*360 - (idx * angle) - (angle/2); // subtract half-segment so center aligns
+    // animate wheel and ball
+    wheelEl.style.transition = 'transform 6s cubic-bezier(.18,.83,.29,1)';
+    ballEl.style.transition = 'transform 6s cubic-bezier(.18,.83,.29,1)';
+
+    // ball rotates opposite direction a bit for effect
+    const ballRot = (spins * -360) + (idx * angle) + (angle/2);
+
+    // start animation
+    requestAnimationFrame(()=>{
+      wheelEl.style.transform = `rotate(${finalRotation}deg)`;
+      ballEl.style.transform = `rotate(${ballRot}deg)`;
+    });
+
+    // lock bets and start a timer to finish
+    setTimeout(()=> {
+      // announce result
+      lastResultEl.textContent = num;
+      // compute payouts
+      settleBets(num);
+      // add to history
+      log(`Round ${round} result: ${num}`);
+      // cleanup markers after a bit
+      setTimeout(()=> {
+        removeAllMarkers();
+        // reset wheel rotation smoothly back to normalized 0 for next spin (but visually the wheel is in correct state)
+        wheelEl.style.transition = 'none';
+        wheelEl.style.transform = `rotate(${(- (idx * angle) - (angle/2))}deg)`; // normalize small rotation to avoid giant rotations accumulating
+        ballEl.style.transition = 'none';
+        ballEl.style.transform = 'rotate(0deg)';
+        spinning = false;
+      }, 1200);
+    }, 6100);
+  }
+
+  function settleBets(resultNum){
+    // yourBets array contains straight bets
+    if(yourBets.length === 0){
+      log('You had no bets this round.');
+    } else {
+      let totalWin = 0;
+      yourBets.forEach(b=>{
+        if(Number(b.num) === Number(resultNum)){
+          const win = b.stake * 35; // payout 35:1 + original stake was already deducted earlier; we credit stake*36? Let's credit profit + stake.
+          // We had already deducted stake at bet time; to give correct net: add stake back + 35*stake.
+          const credit = b.stake + (b.stake * 35);
+          balance += credit;
+          totalWin += credit;
+        }
+      });
+      if(totalWin > 0) {
+        log(`You won ${formatMoney(totalWin)} this round!`);
+      } else {
+        log('You lost your bets this round.');
+      }
+      updateBalance();
+    }
+    // show in game history short record
+    const h = document.createElement('div');
+    h.className = 'log-item';
+    h.textContent = `#${round} — result ${resultNum} — you bet ${yourBets.length} entries`;
+    historyLog.prepend(h);
+    // clear your bets array (bets resolved)
+    yourBets = [];
+    renderYourBets();
+  }
+
+  // simulated players
+  function simulatePlayers(){
+    const players = Math.floor(3 + Math.random()*7); // 3-9 players
+    simCountEl.textContent = players;
+    for(let i=0;i<players;i++){
+      const num = wheelOrder[Math.floor(Math.random()*N)];
+      const amt = [10,20,50,100,200][Math.floor(Math.random()*5)];
+      // small delay markers
+      setTimeout(()=> placeBet(num, amt, 'player'+(i+1)), i*80);
+    }
+  }
+
+  // countdown
+  function startCountdown(){
+    timer = roundIntervalSec;
+    timerEl.textContent = timer;
+    if(countdownInterval) clearInterval(countdownInterval);
+    countdownInterval = setInterval(()=>{
+      if(spinning) { timerEl.textContent = '---'; return; }
+      timer--;
+      timerEl.textContent = timer;
+      if(timer <= 0){
+        // auto spin
+        if(autoOn) performSpin();
+        timer = roundIntervalSec;
+      }
+    },1000);
+  }
+  startCountdown();
+
+  // UI events
+  stakeRange.addEventListener('input', e => {
+    stake = Number(e.target.value);
+    updateStakeUI();
+  });
+
+  autoSpinBtn.addEventListener('click', ()=>{
+    autoOn = !autoOn;
+    autoSpinBtn.textContent = autoOn ? 'Auto ON' : 'Auto OFF';
+    autoSpinBtn.style.opacity = autoOn ? '1' : '0.6';
+  });
+
+  spinNow.addEventListener('click', ()=>{
+    if(spinning) return alert('Already spinning.');
+    performSpin(true);
+    timer = roundIntervalSec;
+    timerEl.textContent = timer;
+  });
+
+  clearBets.addEventListener('click', ()=>{
+    clearYourBets();
+  });
+
+  depositBtn.addEventListener('click', ()=>{
+    const v = Number(depositAmt.value);
+    if(!v || v<=0) return alert('Enter a valid amount to deposit (demo).');
+    balance += Math.round(v);
+    updateBalance();
+    depositAmt.value = '';
+    log(`Demo deposit: ${formatMoney(v)}`);
+  });
+
+  withdrawBtn.addEventListener('click', ()=>{
+    // demo withdraw: reduce balance to 0 and show message
+    if(confirm('Demo withdraw will withdraw all demo balance to "cash out" (simulated). Continue?')){
+      log(`Demo withdraw: ${formatMoney(balance)}`);
+      balance = 0;
+      updateBalance();
+    }
+  });
+
+  // helpers: disable bets while spinning (already checked in placeBet)
+  // reset wheel on load
+  wheelEl.style.transform = 'rotate(0deg)';
+  ballEl.style.transform = 'rotate(0deg)';
+
+  // Show small animation for initial
+  setTimeout(()=> {
+    // small initial simulated bets to populate view
+    simulatePlayers();
+  },600);
+
+  // small UX: show where user clicks by creating marker
+  // (placeBet already adds marker for you)
+
+  // Safety: ensure number of markers doesn't explode by removing old ones periodically
+  setInterval(()=> {
+    if(markers.length > 120) {
+      removeAllMarkers();
+    }
+  }, 15000);
+
+  // expose some functions to console for debugging
+  window.demoRoulette = {
+    placeBet, performSpin, clearYourBets, getState: ()=>({balance, stake, yourBets, round})
+  };
+
+  // final render
+  renderYourBets();
+})();
+</script>
 </body>
 </html>
-:root{--bg:#071022;--card:#07162a;--accent:#ffdf6d;--muted:#9fb3d6}
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans",Arial;background:linear-gradient(180deg,#03040a,#071022);color:#e6eef8}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:rgba(10,14,25,.7);border-bottom:1px solid rgba(255,255,255,.02)}
-.brand{font-weight:800}
-.userinfo .link{margin-left:12px;color:var(--accent);text-decoration:none}
-.container{padding:20px}
-.layout{display:flex;gap:18px;align-items:flex-start}
-.maincard{flex:1;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
-.sidebar{width:340px;display:flex;flex-direction:column;gap:12px}
-.card{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px}
-.wheel-wrap{width:540px;height:540px;position:relative;margin:12px auto}
-.pointer{position:absolute;top:6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-bottom:28px solid var(--accent);z-index:3;filter:drop-shadow(0 6px 14px rgba(0,0,0,.6))}
-#rotator{transition: transform 5s cubic-bezier(.18,.9,.32,1);transform-origin:center}
-.controls{display:flex;gap:8px;align-items:center;margin-top:6px}
-.controls button{background:#0b82ff;border:none;padding:8px 12px;border-radius:8px;color:white;cursor:pointer;font-weight:700}
-.countdown{margin-left:auto;color:var(--muted)}
-.result-row{display:flex;flex-direction:column;align-items:center;margin-top:8px}
-.big-result{font-size:40px;font-weight:900;color:var(--accent)}
-.small-note{color:var(--muted)}
-.authpage{display:flex;align-items:center;justify-content:center;height:100vh}
-.authbox{background:rgba(255,255,255,0.02);padding:20px;border-radius:10px;min-width:320px}
-.authbox input{width:100%;padding:8px;margin:8px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
-.form-inline{display:flex;gap:8px;margin-top:8px}
-.form-inline input{flex:1}
-.history{max-height:220px;overflow:auto;margin-top:8px}
-.hist-row{padding:6px;border-bottom:1px dashed rgba(255,255,255,0.03);opacity:.95}
-.flash{background:#0c233a;padding:8px;border-radius:6px;margin-bottom:12px}
-@media(max-width:980px){.layout{flex-direction:column}.wheel-wrap{width:360px;height:360px}.maincard{padding:8px}}
-      // wheel.js — draws wheel, auto-spin, posts results to server
-(function(){
-  const SEGMENTS = 37;
-  const canvas = document.getElementById('wheel');
-  const ctx = canvas.getContext('2d');
-  const rotator = document.getElementById('rotator');
-  const historyLocal = document.getElementById('localHistory');
-  const serverHistory = document.getElementById('serverHistory');
-  const lastResultEl = document.getElementById('lastResult');
-  const countdownEl = document.getElementById('countdown');
-  const spinNowBtn = document.getElementById('spinNow');
-  const toggleAutoBtn = document.getElementById('toggleAuto');
-  const clearHistoryBtn = document.getElementById('clearHistory');
-
-  // config
-  let autoOn = true;
-  let intervalSec = window.appConfig && window.appConfig.autoInterval ? window.appConfig.autoInterval : 15;
-  let spinDuration = 5;
-
-  function colorForNumber(n){
-    if(n===0) return '#2ecc71';
-    return n % 2 === 0 ? '#d64545' : '#0b84ff';
-  }
-
-  function drawWheel(){
-    const w = canvas.width, h = canvas.height;
-    const cx = w/2, cy = h/2, radius = Math.min(cx,cy)-6;
-    const angle = (Math.PI*2)/SEGMENTS;
-    ctx.clearRect(0,0,w,h);
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.font = 'bold 14px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for(let i=0;i<SEGMENTS;i++){
-      const start = i*angle;
-      const end = start + angle;
-      ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.arc(0,0,radius,start,end);
-      ctx.closePath();
-      ctx.fillStyle = colorForNumber(i);
-      ctx.fill();
-      ctx.save();
-      ctx.rotate(start + angle/2);
-      ctx.fillStyle = '#fff';
-      ctx.translate(radius - 10, 0);
-      ctx.rotate(Math.PI/2);
-      ctx.fillText(String(i), 0, 0);
-      ctx.restore();
-    }
-    ctx.beginPath();
-    ctx.arc(0,0,50,0,Math.PI*2);
-    ctx.fillStyle = '#07122b';
-    ctx.fill();
-    ctx.restore();
-  }
-  drawWheel();
-
-  function addLocalHistory(n){
-    const d = document.createElement('div');
-    const t = new Date().toLocaleTimeString();
-    d.className = 'hist-row';
-    d.textContent = `#${n} — ${t}`;
-    historyLocal.prepend(d);
-    while(historyLocal.children.length > 50) historyLocal.removeChild(historyLocal.lastChild);
-  }
-
-  function doSpin(manual){
-    const chosen = Math.floor(Math.random()*SEGMENTS);
-    const segmentAngle = 360/SEGMENTS;
-    const extraSpins = Math.floor(Math.random()*4)+6;
-    const target = extraSpins*360 + (chosen * segmentAngle) + segmentAngle/2;
-    rotator.style.transition = `transform ${spinDuration}s cubic-bezier(.18,.9,.32,1)`;
-    rotator.style.transform = `rotate(-${target}deg)`;
-    setTimeout(()=> {
-      lastResultEl.textContent = chosen;
-      addLocalHistory(chosen);
-      // post to server
-      fetch(window.appConfig.apiSpinUrl, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({result: chosen})
-      }).then(r=>r.json()).then(j=>{
-        // optionally update serverHistory list (simple prepend)
-        if(j && j.ok){
-          const e = document.createElement('div');
-          e.className = 'hist-row';
-          e.textContent = `#${j.result} — just now`;
-          serverHistory.prepend(e);
-        }
-      }).catch(err=>{
-        console.warn('api spin error', err);
-      });
-    }, spinDuration*1000 + 60);
-  }
-
-  // Auto timer
-  let countdown = intervalSec;
-  let timer = null;
-  function startAuto(){
-    stopAuto();
-    countdown = intervalSec;
-    countdownEl.textContent = `Next in: ${countdown}s`;
-    timer = setInterval(()=>{
-      countdown--;
-      if(countdown <= 0){
-        doSpin(false);
-        countdown = intervalSec;
-      }
-      countdownEl.textContent = `Next in: ${countdown}s`;
-    }, 1000);
-  }
-  function stopAuto(){
-    if(timer){ clearInterval(timer); timer = null; }
-  }
-  startAuto();
-
-  // UI hooks
-  spinNowBtn.addEventListener('click', ()=>{
-    doSpin(true);
-    countdown = intervalSec;
-  });
-  toggleAutoBtn.addEventListener('click', ()=>{
-    autoOn = !autoOn;
-    toggleAutoBtn.textContent = `Auto: ${autoOn ? 'ON':'OFF'}`;
-    if(autoOn) startAuto(); else stopAuto();
-  });
-  clearHistoryBtn.addEventListener('click', ()=> historyLocal.innerHTML = '');
-})();
-        # Roulette Demo (Flask + HTML/JS)
-
-**Warning**: This is a demo app with play-money only. No real payment integration is included.
-
-## Run locally
-1. python -m venv venv
-2. source venv/bin/activate   # Windows: venv\Scripts\activate
-3. pip install -r requirements.txt
-4. python app.py
-5. Open http://127.0.0.1:5000
-
-## Features
-- User register/login (password hashed)
-- Demo wallet (default 1000 DEMO Tk)
-- Canvas roulette wheel with auto-spin and manual spin
-- Spins logged to server DB (SQLite)
-- Demo deposit/withdraw endpoints (no real payment gateway)
-
-## Notes
-- For production: set a secure `app.secret_key`, enable HTTPS, use production DB, add CSRF protection, input validation, rate limiting.
-- Do NOT add real-money payment integration without legal/compliance review.
-        
