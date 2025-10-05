@@ -1,407 +1,324 @@
-<!--
-File: ludo_telegram_full_app.md
-Purpose: Complete 4-player server-authoritative Ludo prototype for Telegram WebApp.
-Contents:
-1) index.html -> Frontend: Telegram WebApp compatible, HTML5 Canvas Ludo UI (4-player), Socket.IO client, wallet UI, WebApp init.
-2) server.js -> Node.js + Express + Socket.IO server: authentication (simple token/telegram id), match-making for 4 players, server-side RNG (authoritative), ledger (in-memory for demo), endpoints for buy_coins (demo), get_balance, report_result, withdraw_request (demo).
-3) Deployment notes and security checklist.
-
-IMPORTANT: This is still a prototype. For any real-money operation, do legal checks, integrate real payment gateways, persistent DB, KYC, SSL, and strong anti-fraud.
--->Ludo Telegram Full App (Prototype)
-
-Below are the two files. Save index.html in a public folder and server.js on your Node server. For development you can run both locally and use ngrok to host the WebApp URL for Telegram.
-
-
----
-
-1) index.html
-
 <!doctype html>
 <html lang="bn">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Ludo 4P - Telegram WebApp</title>
-  <style>
-    :root{--accent:#3b82f6}
-    body{font-family:system-ui,Roboto,'Noto Sans Bengali',sans-serif;margin:0;background:#0f172a;color:#e6eef8}
-    header{background:linear-gradient(90deg,#071133 0%,#08224a 100%);padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
-    header h1{font-size:18px;margin:0}
-    .container{max-width:1100px;margin:18px auto;padding:12px}
-    .row{display:flex;gap:12px;flex-wrap:wrap}
-    .card{background:linear-gradient(180deg,#071533 0%,#081a2f 100%);border-radius:12px;padding:12px;box-shadow:0 8px 28px rgba(2,6,23,0.6);flex:1;min-width:300px}
-    canvas{background:#0b1220;border-radius:8px;display:block;margin:12px auto}
-    .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px}
-    button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
-    .muted{color:#9fb0d8}
-    .wallet{display:flex;gap:8px;align-items:center}
-    .balance{font-weight:700;color:#fff}
-    .log{height:160px;overflow:auto;background:rgba(255,255,255,0.03);border-radius:8px;padding:8px;font-size:13px}
-    .small{font-size:13px;color:#9fb0d8}
-    .playerSlot{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)}
-    @media(max-width:900px){.row{flex-direction:column}}
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Better Ludo — 4 Player Demo</title>
+<style>
+  :root{--accent:#1e88ff;--bg:#f3f7fb}
+  body{margin:0;font-family:Inter, NotoSansBengali, Roboto, sans-serif;background:var(--bg);color:#0b1220}
+  .top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid #e6eef8}
+  h1{margin:0;font-size:16px}
+  .wallet{display:flex;gap:10px;align-items:center}
+  .container{max-width:980px;margin:18px auto;padding:12px}
+  .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
+  #boardWrap{display:flex;justify-content:center}
+  canvas{width:92vw;max-width:640px;height:92vw;max-height:640px;background:linear-gradient(180deg,#ffffff,#f1f6ff);border-radius:12px;display:block}
+  .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px}
+  button{background:var(--accent);color:#fff;border:none;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+  .muted{color:#556;font-size:13px}
+  .log{height:140px;overflow:auto;padding:8px;background:#fbfeff;border-radius:8px;border:1px solid #eef6ff;margin-top:12px}
+  @media(min-width:900px){ .grid{display:flex;gap:12px} .left{flex:2} .right{flex:1} }
+</style>
 </head>
 <body>
-  <header>
-    <h1>Ludo 4 Player — Telegram WebApp</h1>
+  <div class="top">
+    <h1>Telegram Ludo — Better Prototype</h1>
     <div class="wallet">
-      <div class="small muted">Coins:</div>
-      <div id="balance" class="balance">0</div>
+      <div class="muted">Coins</div>
+      <div id="balance" style="font-weight:700">2000</div>
       <button id="buyBtn">Buy 100</button>
     </div>
-  </header>
+  </div>
 
   <div class="container">
-    <div class="row">
-      <div class="card" style="flex:2">
-        <h3 style="margin:0 0 8px 0">Game Board (4 Players)</h3>
-        <canvas id="board" width="600" height="600"></canvas>
-        <div class="controls">
-          <button id="connectBtn">Connect</button>
-          <button id="createRoomBtn">Create Room</button>
-          <button id="joinRoomBtn">Join Room</button>
-          <div id="roomId" class="muted small">Room: -</div>
-        </div>
+    <div class="card grid">
+      <div class="left card" style="padding:12px">
+        <div id="boardWrap"><canvas id="board" width="640" height="640"></canvas></div>
         <div class="controls">
           <button id="rollBtn">Roll Dice</button>
-          <div id="diceDisplay" class="muted">Dice: -</div>
+          <div id="dice" class="muted">Dice: -</div>
+          <button id="moveBtn">Move</button>
+          <div id="turnLabel" style="margin-left:12px" class="muted">Turn: -</div>
         </div>
-        <div class="small muted" style="text-align:center;margin-top:8px">Server-authoritative dice & move validation (real-time via Socket.IO)</div>
+        <div class="muted" style="text-align:center;margin-top:8px;font-size:13px">Demo: client-side moves — production should be server-authoritative</div>
       </div>
 
-      <div class="card" style="flex:1">
-        <h3 style="margin:0 0 8px 0">Match & Wallet</h3>
-        <div style="margin-bottom:8px">Mode: <strong id="mode">Coin Battle</strong></div>
-        <div style="margin-bottom:8px">Entry Fee: <strong id="entryFee">50</strong> coins</div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">
-          <button id="joinMatchBtn">Join Match (Deduct Fee)</button>
-          <button id="leaveMatchBtn">Leave Match (Refund)</button>
-          <button id="reportWinBtn">Claim Win (Demo)</button>
-          <button id="syncBalanceBtn">Refresh Balance</button>
+      <div class="right card" style="padding:12px">
+        <h3 style="margin:0 0 8px 0">Players</h3>
+        <div id="players">
+          <div><strong>Blue:</strong> You</div>
+          <div><strong>Green:</strong> CPU</div>
+          <div><strong>Yellow:</strong> CPU</div>
+          <div><strong>Red:</strong> CPU</div>
         </div>
 
-        <h4 style="margin-top:12px">Players</h4>
-        <div id="playersList" style="display:flex;flex-direction:column;gap:8px"></div>
+        <div style="margin-top:12px">
+          <button id="startBtn" style="background:#0ea5a1">Start Match</button>
+          <button id="resetBtn" style="background:#ef4444">Reset</button>
+        </div>
 
-        <h4 style="margin-top:12px">Logs</h4>
+        <h4 style="margin-top:12px">Activity</h4>
         <div id="log" class="log"></div>
       </div>
     </div>
   </div>
 
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script>
-const API_BASE = window.location.origin; // change if server on different domain
-let socket = null;
-let myUser = {id: null, name: 'guest'};
-let currentRoom = null;
+/*
+  Better 4-player Ludo demo (client-side).
+  - Board path: 0..51 (standard outer track)
+  - Each player has 4 tokens; each token state = {pos: -1} (-1 means at home)
+  - Entry square index per player: blue 0, green 13, yellow 26, red 39
+  - Home stretch / finishing not fully implemented for brevity, but moving around track works.
+  - For real game implement final home lanes & capture rules server-side.
+*/
 
-// -----------------------------
-// UI helpers
-// -----------------------------
+// UI
 const logEl = document.getElementById('log');
-function log(msg){
-  const p = document.createElement('div'); p.textContent = '['+new Date().toLocaleTimeString()+'] '+msg; logEl.prepend(p)
+function log(msg){ const d=new Date().toLocaleTimeString(); logEl.prepend(document.createElement('div')).textContent='['+d+'] '+msg; }
+function q(id){ return document.getElementById(id) }
+
+// Canvas + board mapping
+const canvas = q('board'), ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const center = {x:W/2,y:H/2};
+
+// board geometry
+const outer = 560; // playable square size
+const margin = (W-outer)/2;
+const cell = outer/15; // use 15x15 grid representation to draw Ludo board squares
+
+// Precompute path coordinates for 52 outer squares (approx positions)
+// We'll map indices to x,y normalized (0..1) so drawing scales with canvas size.
+let path = []; // array of {x,y} normalized 0..1
+(function buildPath(){
+  // We'll layout path around the square perimeter following Ludo order
+  // For simplicity make 52 positions around edges: top row left->right (0..6), right column top->bottom (7..20), bottom row right->left (21..27), left column bottom->top (28..41), top row left small section (42..51)
+  // To be consistent, we'll generate 52 points around the perimeter evenly.
+  const total=52;
+  for(let i=0;i<total;i++){
+    const theta = (i/total) * Math.PI*2; // param around circle to spread nicely
+    // map to square perimeter: project circle point to square edge
+    const cx = Math.cos(theta), cy = Math.sin(theta);
+    // project onto max abs axis to place on square
+    const nx = cx/Math.max(Math.abs(cx), Math.abs(cy));
+    const ny = cy/Math.max(Math.abs(cx), Math.abs(cy));
+    // normalize from -1..1 to 0..1 inside inner square margin
+    const x = 0.5 + 0.4 * nx;
+    const y = 0.5 + 0.4 * ny;
+    path.push({x,y});
+  }
+})();
+
+// players & tokens
+const players = [
+  {id:'blue', color:'#0b78ff', entry:0},
+  {id:'green', color:'#22c55e', entry:13},
+  {id:'yellow', color:'#f59e0b', entry:26},
+  {id:'red', color:'#ef4444', entry:39}
+];
+// each player has 4 tokens
+let tokens = [];
+for(let p=0;p<4;p++){
+  tokens[p]=[];
+  for(let t=0;t<4;t++) tokens[p].push({pos:-1}); // -1 at home
 }
-function setRoomId(id){ currentRoom = id; document.getElementById('roomId').textContent = 'Room: '+(id||'-') }
 
-// -----------------------------
-// Telegram WebApp init (if present)
-// -----------------------------
-let tg = null
-if(window.Telegram && Telegram.WebApp){
-  try{
-    Telegram.WebApp.init();
-    tg = Telegram.WebApp;
-    const user = tg.initDataUnsafe?.user || null;
-    if(user){ myUser.id = user.id; myUser.name = user.first_name || ('tg'+user.id); }
-    log('Telegram detected. User: '+JSON.stringify(user))
-  }catch(e){console.warn(e)}
-} else {
-  // fallback demo user
-  myUser.id = 'demo_'+Math.floor(Math.random()*10000);
-  myUser.name = 'demouser';
-  log('Telegram not detected, using demo user '+myUser.id)
-}
+let turn = 0;
+let dice = null;
+q('turnLabel').textContent = 'Not started';
 
-// -----------------------------
-// Canvas board draw (simple 4-player track visualization)
-// -----------------------------
-const canvas = document.getElementById('board');
-const ctx = canvas.getContext('2d');
-const W = canvas.width; const H = canvas.height;
-let boardState = null; // from server
-
+// draw function
 function draw(){
   ctx.clearRect(0,0,W,H);
-  // background
-  ctx.fillStyle='#071331'; ctx.fillRect(0,0,W,H);
-  // draw 4 corners as home
-  const s = 120;
-  // blue top-left
-  ctx.fillStyle='#1e3a8a'; ctx.fillRect(20,20,s,s);
-  // green top-right
-  ctx.fillStyle='#065f46'; ctx.fillRect(W-s-20,20,s,s);
-  // yellow bottom-right
-  ctx.fillStyle='#b45309'; ctx.fillRect(W-s-20,H-s-20,s,s);
-  // red bottom-left
-  ctx.fillStyle='#991b1b'; ctx.fillRect(20,H-s-20,s,s);
-  // center home area
-  ctx.fillStyle='#0b1220'; ctx.fillRect(W/2-90,H/2-90,180,180);
-  // draw tokens from boardState
-  if(boardState && boardState.tokens){
-    for(const t of boardState.tokens){
-      const {player, x, y, color} = t; // server gives normalized positions
-      ctx.beginPath(); ctx.fillStyle = color; ctx.arc(x*W, y*H, 12, 0, Math.PI*2); ctx.fill();
-      ctx.closePath();
+  // background card
+  ctx.fillStyle='#fff'; ctx.fillRect(margin,margin,outer,outer);
+  // draw grid faint
+  ctx.strokeStyle='#eef4ff'; ctx.lineWidth=1;
+  for(let i=0;i<=15;i++){
+    // vertical
+    const x = margin + (outer/15)*i;
+    ctx.beginPath(); ctx.moveTo(x, margin); ctx.lineTo(x, margin+outer); ctx.stroke();
+    // horizontal
+    const y = margin + (outer/15)*i;
+    ctx.beginPath(); ctx.moveTo(margin, y); ctx.lineTo(margin+outer, y); ctx.stroke();
+  }
+
+  // draw path squares (small rounded) and indices optionally
+  for(let i=0;i<path.length;i++){
+    const p = path[i];
+    const px = margin + p.x*outer;
+    const py = margin + p.y*outer;
+    // square
+    ctx.fillStyle = '#fafcff';
+    ctx.strokeStyle = '#e6efff';
+    roundRect(ctx, px-14, py-14, 28,28,6, true, true);
+    // index small
+    ctx.fillStyle='#9fb0d8'; ctx.font='10px sans-serif'; ctx.fillText(i, px-8, py+4);
+  }
+
+  // draw tokens
+  for(let pi=0;pi<players.length;pi++){
+    for(let ti=0;ti<tokens[pi].length;ti++){
+      const tk = tokens[pi][ti];
+      if(tk.pos === -1){
+        // draw at home corner positions (4 small circles)
+        const homeCoord = homePosition(pi, ti);
+        drawToken(homeCoord.x, homeCoord.y, players[pi].color, 12);
+      } else {
+        const idx = (tk.pos)%path.length;
+        const p = path[idx];
+        drawToken(margin + p.x*outer, margin + p.y*outer, players[pi].color, 12, true);
+      }
     }
+  }
+
+  // highlight current player's entry
+  const entryIdx = players[turn].entry;
+  const e = path[entryIdx];
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+  roundRect(ctx, margin + e.x*outer - 18, margin + e.y*outer - 18, 36,36,8,false,true);
+}
+
+// helper to draw circle token
+function drawToken(x,y,color,r,fill=true){
+  ctx.beginPath(); ctx.fillStyle = color; ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.closePath();
+  if(!fill){ ctx.strokeStyle='#000'; ctx.stroke(); }
+}
+
+// draw rounded rect helper
+function roundRect(ctx,x,y,w,h,r,fill,stroke){
+  if(r===undefined) r=5;
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+  if(fill) ctx.fillStyle = '#fff', ctx.fill();
+  if(stroke) ctx.strokeStyle = '#cfe4ff', ctx.stroke();
+}
+
+// home positions (four tokens per player) arranged in player corners
+function homePosition(playerIndex, tokenIndex){
+  // corners: 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left
+  const cornerOffsets = [
+    {x: margin + outer*0.12, y: margin + outer*0.12},
+    {x: margin + outer*0.88, y: margin + outer*0.12},
+    {x: margin + outer*0.88, y: margin + outer*0.88},
+    {x: margin + outer*0.12, y: margin + outer*0.88}
+  ];
+  const base = cornerOffsets[playerIndex];
+  // arrange 2x2
+  const dx = (tokenIndex%2===0)? -12 : 12;
+  const dy = (tokenIndex<2)? -12 : 12;
+  return {x: base.x + dx, y: base.y + dy};
+}
+
+// simple animation move (teleport with small lerp)
+function animateMove(playerIndex, tokenIndex, fromPos, toPos, cb){
+  const steps = 12; let s=0;
+  const start = (fromPos===-1)? homePosition(playerIndex, tokenIndex) : {x: margin + path[fromPos%path.length].x*outer, y: margin + path[fromPos%path.length].y*outer};
+  const end = {x: margin + path[toPos%path.length].x*outer, y: margin + path[toPos%path.length].y*outer};
+  const id = setInterval(()=>{ s++; const t=s/steps; const x = start.x + (end.x-start.x)*t; const y = start.y + (end.y-start.y)*t;
+    // redraw static board then draw moving token on top
+    draw();
+    drawToken(x,y,players[playerIndex].color,14);
+    if(s>=steps){ clearInterval(id); if(cb) cb(); }
+  }, 16);
+}
+
+// roll dice (client random for demo)
+function rollDice(){
+  dice = Math.floor(Math.random()*6)+1;
+  q('dice').textContent = 'Dice: '+dice;
+  log('Rolled '+dice);
+  return dice;
+}
+
+// find movable tokens for current player
+function movableTokensFor(playerIndex){
+  // rule: if token at home (-1) only can enter if dice==6 -> move to entry
+  // else token moves forward by dice
+  const arr = [];
+  for(let i=0;i<tokens[playerIndex].length;i++){
+    const tk = tokens[playerIndex][i];
+    if(tk.pos===-1){
+      if(dice===6) arr.push(i);
+    } else {
+      arr.push(i);
+    }
+  }
+  return arr;
+}
+
+// perform move: choose first movable token (simple auto for demo)
+function moveSelected(){
+  if(dice==null){ alert('Roll first'); return; }
+  const playerIndex = turn;
+  const movable = movableTokensFor(playerIndex);
+  if(movable.length===0){ log('No movable tokens for player '+players[playerIndex].id); endTurn(); return; }
+  const idx = movable[0];
+  const tk = tokens[playerIndex][idx];
+  const from = tk.pos;
+  let to;
+  if(from===-1) to = players[playerIndex].entry;
+  else to = (from + dice) % path.length;
+  // animate
+  animateMove(playerIndex, idx, from, to, ()=>{
+    tokens[playerIndex][idx].pos = to;
+    log(players[playerIndex].id + ' moved token '+(idx+1)+' to '+to);
+    // simple capture: if any opponent token occupies same pos -> send them home (demo)
+    for(let pi=0; pi<tokens.length; pi++){
+      if(pi===playerIndex) continue;
+      for(let ti=0; ti<tokens[pi].length; ti++){
+        if(tokens[pi][ti].pos === to){
+          tokens[pi][ti].pos = -1;
+          log('Captured '+players[pi].id+' token '+(ti+1));
+        }
+      }
+    }
+    // if dice!=6 -> next turn
+    if(dice!==6) endTurn(); else { log('Got 6! play again'); dice=null; q('dice').textContent='Dice: -'; }
+  });
+}
+
+// end turn
+function endTurn(){
+  dice = null; q('dice').textContent='Dice: -';
+  turn = (turn+1)%4;
+  q('turnLabel').textContent = players[turn].id.toUpperCase();
+  // if CPU turn -> auto roll & move after short delay
+  if(players[turn].id !== 'blue'){ // assume blue=You
+    setTimeout(()=>{ rollDice(); setTimeout(()=> moveSelected(), 500); }, 600);
   }
 }
 
-setInterval(draw, 1000/15);
-
-// -----------------------------
-// Wallet demo functions (call server endpoints)
-// -----------------------------
-async function fetchBalance(){
-  try{
-    const res = await fetch(API_BASE + '/api/get_balance?user='+encodeURIComponent(myUser.id));
-    const data = await res.json();
-    document.getElementById('balance').textContent = data.balance;
-    log('Balance: '+data.balance);
-  }catch(e){ log('Balance fetch failed') }
-}
-async function buyCoins(amount=100){
-  try{
-    const res = await fetch(API_BASE + '/api/buy_coins', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user:myUser.id, amount})});
-    const data = await res.json(); fetchBalance(); log('Bought coins (demo): '+amount)
-  }catch(e){ log('Buy failed') }
+// Start match: reset tokens and set you as blue
+function startMatch(){
+  for(let p=0;p<4;p++) for(let t=0;t<4;t++) tokens[p][t].pos = -1;
+  turn = 0; dice = null; q('turnLabel').textContent = players[turn].id.toUpperCase();
+  q('dice').textContent = 'Dice: -';
+  log('Match started');
+  draw();
+  // if CPU present on blue? in this demo only blue is you.
 }
 
-// -----------------------------
-// Socket.IO flows: connect, create/join room, gameplay
-// -----------------------------
-function connectSocket(){
-  if(socket && socket.connected) return;
-  socket = io(API_BASE, { autoConnect: false });
-  socket.on('connect', ()=>{ log('socket connected '+socket.id); socket.emit('identify', {userId: myUser.id, name: myUser.name}); });
-  socket.on('disconnect', ()=>{ log('socket disconnected') });
+// reset
+function resetAll(){ startMatch(); logEl.innerHTML=''; log('Reset done'); }
 
-  socket.on('roomInfo', (data)=>{
-    log('roomInfo: '+JSON.stringify(data));
-    setRoomId(data.roomId);
-    renderPlayers(data.players);
-  });
+// wiring
+q('rollBtn').addEventListener('click', ()=>{ if(q('turnLabel').textContent==='Not started'){ alert('Start match first'); return;} rollDice(); });
+q('moveBtn').addEventListener('click', ()=> moveSelected());
+q('startBtn').addEventListener('click', ()=> startMatch());
+q('resetBtn').addEventListener('click', ()=> resetAll());
+q('buyBtn').addEventListener('click', ()=>{ let b=Number(q('balance').textContent||0); b+=100; q('balance').textContent=b; log('Bought 100 coins (demo)') });
 
-  socket.on('boardState', (data)=>{ boardState = data; });
-  socket.on('diceResult', (d)=>{ document.getElementById('diceDisplay').textContent = 'Dice: '+d; log('Dice from server: '+d) });
-  socket.on('errorMsg', (m)=>{ log('Server error: '+m) });
-  socket.on('matchStarted', ()=>{ log('Match started!') });
-  socket.open();
-}
-
-function createRoom(){
-  if(!socket) connectSocket();
-  socket.emit('createRoom', {entryFee: Number(document.getElementById('entryFee').textContent)} , (res)=>{
-    if(res.ok){ setRoomId(res.roomId); log('Room created '+res.roomId) } else log('Create failed')
-  });
-}
-function joinRoom(){
-  const rid = prompt('Enter Room ID to join:'); if(!rid) return;
-  socket.emit('joinRoom', {roomId: rid}, (res)=>{ if(res.ok){ setRoomId(rid); log('Joined '+rid) } else log('Join failed: '+res.error) });
-}
-
-function rollDice(){
-  if(!currentRoom){ alert('Join or create a room first'); return }
-  socket.emit('rollDice', {roomId: currentRoom}, (res)=>{ if(!res.ok) log('Roll failed: '+res.error) });
-}
-
-// -----------------------------
-// Player list UI
-// -----------------------------
-function renderPlayers(players){
-  const el = document.getElementById('playersList'); el.innerHTML = '';
-  players.forEach(p=>{
-    const d = document.createElement('div'); d.className='playerSlot'; d.textContent = (p.isReady? '✅ ':'') + p.name + ' ('+p.id+')' + (p.id===myUser.id? ' [You]':'');
-    el.appendChild(d);
-  })
-}
-
-// -----------------------------
-// Buttons wiring
-// -----------------------------
-document.getElementById('connectBtn').addEventListener('click', ()=>connectSocket());
-document.getElementById('createRoomBtn').addEventListener('click', ()=>createRoom());
-document.getElementById('joinRoomBtn').addEventListener('click', ()=>joinRoom());
-document.getElementById('rollBtn').addEventListener('click', ()=>rollDice());
-document.getElementById('buyBtn').addEventListener('click', ()=>buyCoins(100));
-document.getElementById('joinMatchBtn').addEventListener('click', async ()=>{
-  const res = await fetch(API_BASE+'/api/join_match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:myUser.id, entryFee:50})});
-  const data = await res.json(); if(data.ok) fetchBalance(); log('Join match: '+JSON.stringify(data));
-});
-document.getElementById('leaveMatchBtn').addEventListener('click', async ()=>{
-  const res = await fetch(API_BASE+'/api/leave_match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:myUser.id})});
-  const data = await res.json(); if(data.ok) fetchBalance(); log('Left match: '+JSON.stringify(data));
-});
-document.getElementById('reportWinBtn').addEventListener('click', async ()=>{
-  const res = await fetch(API_BASE+'/api/report_win',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user:myUser.id, amount:100})});
-  const data = await res.json(); if(data.ok) fetchBalance(); log('Reported win (demo)');
-});
-document.getElementById('syncBalanceBtn').addEventListener('click', ()=>fetchBalance());
-
-// initial
-fetchBalance();
-
+// initial draw
+draw();
+log('Prototype ready — Press Start Match then Roll Dice');
 </script>
 </body>
 </html>
-
-
----
-
-2) server.js (Node.js + Express + Socket.IO)
-
-// server.js
-// Minimal prototype server. INSTALL: npm i express socket.io cors
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: true } });
-
-// ----- In-memory stores (demo) -----
-const users = {}; // userId -> {balance}
-const rooms = {}; // roomId -> {players: [userId], state}
-
-function ensureUser(id){ if(!users[id]) users[id] = {balance: 500}; }
-
-// ----- Helper: create roomId -----
-function mkRoomId(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
-
-// ----- REST API (demo ledger + actions) -----
-app.get('/api/get_balance', (req,res)=>{
-  const user = req.query.user || 'demo'; ensureUser(user);
-  res.json({balance: users[user].balance});
-});
-
-app.post('/api/buy_coins', (req,res)=>{
-  const {user, amount} = req.body; ensureUser(user);
-  users[user].balance += Number(amount || 100);
-  res.json({ok:true, balance: users[user].balance});
-});
-
-app.post('/api/join_match', (req,res)=>{
-  const {user, entryFee} = req.body; ensureUser(user);
-  if(users[user].balance < entryFee) return res.json({ok:false, error:'Insufficient balance'});
-  users[user].balance -= Number(entryFee);
-  res.json({ok:true, balance:users[user].balance});
-});
-app.post('/api/leave_match', (req,res)=>{ const {user} = req.body; ensureUser(user); users[user].balance += 50; res.json({ok:true}); });
-app.post('/api/report_win', (req,res)=>{ const {user, amount} = req.body; ensureUser(user); users[user].balance += Number(amount || 100); res.json({ok:true}); });
-
-// ----- Socket.IO: realtime rooms & server-side RNG -----
-io.on('connection', (socket)=>{
-  console.log('conn', socket.id);
-  socket.on('identify', (data)=>{ socket.data.userId = data.userId; socket.data.name = data.name; ensureUser(data.userId); });
-
-  socket.on('createRoom', (opts, cb)=>{
-    const id = mkRoomId(); rooms[id] = {players: [], host: socket.id, state: {tokens: []}};
-    cb({ok:true, roomId:id});
-  });
-
-  socket.on('joinRoom', ({roomId}, cb)=>{
-    const r = rooms[roomId];
-    if(!r) return cb({ok:false, error:'No such room'});
-    if(r.players.length >= 4) return cb({ok:false, error:'Room full'});
-    r.players.push({id: socket.data.userId, sid: socket.id, name: socket.data.name, isReady:false});
-    socket.join(roomId);
-    io.to(roomId).emit('roomInfo', {roomId, players: r.players.map(p=>({id:p.id,name:p.name, isReady:p.isReady}))});
-    cb({ok:true});
-    // auto-start if 4 players
-    if(r.players.length === 4) startMatch(roomId);
-  });
-
-  socket.on('rollDice', ({roomId}, cb)=>{
-    const r = rooms[roomId]; if(!r) return cb({ok:false, error:'no room'});
-    // server RNG
-    const d = Math.floor(Math.random()*6)+1;
-    io.to(roomId).emit('diceResult', d);
-    // update internal game state: move a token for the player's slot (very basic demo)
-    // For real game: maintain game state, whose turn, token positions, valid moves etc.
-    // We'll append a dummy token for visualization
-    const norm = {player: socket.data.userId, color:'#'+(Math.random()*0xFFFFFF<<0).toString(16).padStart(6,'0'), x: Math.random(), y: Math.random()};
-    r.state.tokens = r.state.tokens || [];
-    r.state.tokens.push(norm);
-    io.to(roomId).emit('boardState', r.state);
-    cb({ok:true});
-  });
-
-  socket.on('disconnect', ()=>{ console.log('disconn', socket.id); /* remove from rooms */ for(const rid in rooms){ const r = rooms[rid]; r.players = r.players.filter(p=>p.sid!==socket.id); io.to(rid).emit('roomInfo',{roomId:rid, players: r.players.map(p=>({id:p.id,name:p.name}))}); if(r.players.length===0) delete rooms[rid]; } });
-});
-
-// ----- startMatch: initialize board and notify players -----
-function startMatch(roomId){
-  const r = rooms[roomId]; if(!r) return;
-  // initialize tokens: for 4 players set empty tokens array
-  r.state = {tokens: []};
-  // notify all
-  io.to(roomId).emit('matchStarted', {roomId});
-  io.to(roomId).emit('boardState', r.state);
-}
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, ()=>console.log('Server listening', PORT));
-
-
----
-
-Deployment & Next steps
-
-1. Run server: node server.js (requires Node.js). Make sure port 3000 is reachable. Use ngrok http 3000 for Telegram WebApp testing.
-
-
-2. Serve index.html from a static host (can be same server; e.g., express.static) and open the URL inside Telegram WebApp via a bot button.
-
-
-3. Connect Telegram Bot: Use BotFather to create a bot, then send users a message with a WebApp button pointing to the index.html URL.
-
-
-4. Important improvements before real-money:
-
-Replace in-memory stores with PostgreSQL/MongoDB.
-
-Implement full server-side game logic for Ludo rules (turn order, token capturing, safe squares, final home).
-
-Implement secure user authentication (verify Telegram initData via bot or server-side authentication).
-
-Integrate a payment gateway & webhook for deposit, and a manual/automated withdraw flow with KYC.
-
-Add anti-cheat: server RNG seeds, signed logs, rate limits, device fingerprint.
-
-
-
-
-Security & Legal checklist
-
-Use HTTPS (required by Telegram). Use valid SSL cert.
-
-Do not store card/payment data; use gateway tokenization.
-
-Consult local laws about real-money gaming and gambling.
-
-Add Terms & Privacy pages, age verification, KYC flows.
-
-
-
----
-
-If tumi chaile ami ei code ke aro detail-e server-authoritative Ludo rules diye upgrade kore dibo — ঐখানে turn management, valid moves, captures, safe zones, finishing logic, and payout distribution (commission, winner payout) যোগ করবো।
-
-Bol - ami ekhanei 4-player game logic (server-side) diye ekta full production-ready flow likhe dite pari. কি শুরু করি?
-
