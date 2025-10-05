@@ -32,15 +32,15 @@ const board = document.getElementById('board');
 const balanceEl = document.getElementById('balance');
 const diceResultEl = document.getElementById('diceResult');// Initialize board for(let i=0;i<225;i++) { const cell = document.createElement('div'); cell.className = 'cell'; board.appendChild(cell); }
 
-// Players let players = [ {pos: 0, color: 'p1', balance: 1000}, {pos: 0, color: 'p2', balance: 1000}, {pos: 0, color: 'p3', balance: 1000}, {pos: 0, color: 'p4', balance: 1000} ];
+// Players let players = [ {pos: 0, color: 'p1', balance: 1000, home: true}, {pos: 0, color: 'p2', balance: 1000, home: true}, {pos: 0, color: 'p3', balance: 1000, home: true}, {pos: 0, color: 'p4', balance: 1000, home: true} ];
 
 let currentPlayer = 0;
 
-function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
+function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { if(!p.home) { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); } }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
 
 function rollDice() { const dice = Math.floor(Math.random()*6)+1; diceResultEl.innerText = Player ${currentPlayer+1} rolled: ${dice}; movePlayer(dice); }
 
-function movePlayer(dice) { players[currentPlayer].pos += dice; if(players[currentPlayer].pos >= 224) players[currentPlayer].pos = 224; updateBoard(); currentPlayer = (currentPlayer + 1) % 4; }
+function movePlayer(dice) { let player = players[currentPlayer]; if(player.home && dice === 6) { player.home = false; // Move out of home player.pos = 0; } else if(!player.home) { player.pos += dice; if(player.pos >= 224) player.pos = 224; // Reached end } // Check attack other players players.forEach((p,i) => { if(i !== currentPlayer && p.pos === player.pos && !p.home) { p.home = true; p.pos = 0; alert(Player ${currentPlayer+1} attacked Player ${i+1}!); } }); updateBoard(); if(players[currentPlayer].home && dice === 6) { diceResultEl.innerText += ' - You got 6! Roll again.'; } else { currentPlayer = (currentPlayer + 1) % 4; } }
 
 function deposit() { let amount = parseInt(prompt('Deposit amount:')); if(amount > 0) { players[currentPlayer].balance += amount; updateBoard(); alert(Player ${currentPlayer+1} deposited ${amount}); } }
 
