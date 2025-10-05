@@ -2,45 +2,55 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>৪-প্লেয়ার লুডু গেম</title>
+<title>৪-প্লেয়ার লুডু গেম - Pro UI Version</title>
 <style>
-  body { font-family: Arial, sans-serif; background-color: #f0f0f0; text-align: center; }
-  .board { display: grid; grid-template-columns: repeat(15, 40px); grid-template-rows: repeat(15, 40px); margin: 20px auto; }
-  .cell { border: 1px solid #999; width: 40px; height: 40px; position: relative; }
-  .player { border-radius: 50%; width: 30px; height: 30px; position: absolute; top: 5px; left: 5px; }
+  body { font-family: Arial, sans-serif; background-color: #e0f7fa; text-align: center; }
+  h1 { margin-top: 10px; color: #00796b; }
+  .board { display: grid; grid-template-columns: repeat(15, 50px); grid-template-rows: repeat(15, 50px); margin: 20px auto; border: 3px solid #004d40; border-radius: 10px; }
+  .cell { border: 1px solid #999; width: 50px; height: 50px; position: relative; background-color: #ffffff; transition: background 0.3s; }
+  .player { border-radius: 50%; width: 40px; height: 40px; position: absolute; top: 5px; left: 5px; transition: all 0.5s; }
   .p1 { background-color: red; }
   .p2 { background-color: green; }
   .p3 { background-color: yellow; }
   .p4 { background-color: blue; }
   .controls { margin: 20px; }
-  .balance { margin: 10px; }
-  button { padding: 10px 20px; margin: 5px; }
+  .balance { margin: 10px; font-weight: bold; font-size: 18px; }
+  button { padding: 12px 25px; margin: 5px; border: none; border-radius: 5px; background-color: #00796b; color: white; cursor: pointer; transition: background 0.3s; }
+  button:hover { background-color: #004d40; }
+  .star { background-color: orange; border-radius: 50%; }
+  .home-cell { background-color: #b2dfdb; border-radius: 5px; }
 </style>
 </head>
 <body>
-<h1>৪-প্লেয়ার লুডু গেম</h1>
-<div class="balance" id="balance">Player Balances: P1: 1000, P2: 1000, P3: 1000, P4: 1000</div>
+<h1>৪-প্লেয়ার লুডু গেম - Pro UI</h1>
+<div class="balance" id="balance"></div>
 <div class="controls">
   <button onclick="rollDice()">Dice Roll</button>
   <button onclick="deposit()">Deposit</button>
   <button onclick="withdraw()">Withdraw</button>
 </div>
 <div class="board" id="board"></div>
-<div id="diceResult"></div>
+<div id="diceResult" style="margin-top:10px; font-size:16px;"></div>
 <script>
 const board = document.getElementById('board');
 const balanceEl = document.getElementById('balance');
-const diceResultEl = document.getElementById('diceResult');// Initialize board for(let i=0;i<225;i++) { const cell = document.createElement('div'); cell.className = 'cell'; board.appendChild(cell); }
+const diceResultEl = document.getElementById('diceResult');// Initialize board with home/star cells for(let i=0;i<225;i++) { const cell = document.createElement('div'); cell.className = 'cell'; if([0,14,210,224].includes(i)) cell.classList.add('home-cell'); if([7,37,187,217].includes(i)) cell.classList.add('star'); board.appendChild(cell); }
 
-// Players let players = [ {pos: 0, color: 'p1', balance: 1000, home: true}, {pos: 0, color: 'p2', balance: 1000, home: true}, {pos: 0, color: 'p3', balance: 1000, home: true}, {pos: 0, color: 'p4', balance: 1000, home: true} ];
+// Players let players = [ {pos: null, color: 'p1', balance: 1000, home: true, startPos:0}, {pos: null, color: 'p2', balance: 1000, home: true, startPos:14}, {pos: null, color: 'p3', balance: 1000, home: true, startPos:210}, {pos: null, color: 'p4', balance: 1000, home: true, startPos:224} ];
 
 let currentPlayer = 0;
 
-function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { if(!p.home) { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); } }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
+function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { if(!p.home && p.pos !== null) { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); } }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
 
 function rollDice() { const dice = Math.floor(Math.random()*6)+1; diceResultEl.innerText = Player ${currentPlayer+1} rolled: ${dice}; movePlayer(dice); }
 
-function movePlayer(dice) { let player = players[currentPlayer]; if(player.home && dice === 6) { player.home = false; // Move out of home player.pos = 0; } else if(!player.home) { player.pos += dice; if(player.pos >= 224) player.pos = 224; // Reached end } // Check attack other players players.forEach((p,i) => { if(i !== currentPlayer && p.pos === player.pos && !p.home) { p.home = true; p.pos = 0; alert(Player ${currentPlayer+1} attacked Player ${i+1}!); } }); updateBoard(); if(players[currentPlayer].home && dice === 6) { diceResultEl.innerText += ' - You got 6! Roll again.'; } else { currentPlayer = (currentPlayer + 1) % 4; } }
+function movePlayer(dice) { let player = players[currentPlayer]; if(player.home && dice === 6) { player.home = false; player.pos = player.startPos; } else if(!player.home && player.pos !== null) { player.pos += dice; if(player.pos > 224) player.pos = 224; }
+
+// Attack check players.forEach((p,i) => { if(i !== currentPlayer && p.pos === player.pos && !p.home) { p.home = true; p.pos = null; alert(Player ${currentPlayer+1} attacked Player ${i+1}!); } });
+
+updateBoard();
+
+if(player.home === false && dice === 6) { diceResultEl.innerText += ' - You got 6! Roll again.'; } else { currentPlayer = (currentPlayer + 1) % 4; } }
 
 function deposit() { let amount = parseInt(prompt('Deposit amount:')); if(amount > 0) { players[currentPlayer].balance += amount; updateBoard(); alert(Player ${currentPlayer+1} deposited ${amount}); } }
 
