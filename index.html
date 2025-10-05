@@ -1,28 +1,30 @@
-<!DOCTYPE html><html lang="bn">
+<!DOCTYPE html>
+<html lang="bn">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>৪-প্লেয়ার লুডু গেম - Pro UI Version</title>
+<title>৪-প্লেয়ার লুডু গেম - Final Version</title>
 <style>
-  body { font-family: Arial, sans-serif; background-color: #e0f7fa; text-align: center; }
+  body { font-family: Arial, sans-serif; background-color: #e0f7fa; text-align: center; margin:0; padding:0; }
   h1 { margin-top: 10px; color: #00796b; }
-  .board { display: grid; grid-template-columns: repeat(15, 50px); grid-template-rows: repeat(15, 50px); margin: 20px auto; border: 3px solid #004d40; border-radius: 10px; }
-  .cell { border: 1px solid #999; width: 50px; height: 50px; position: relative; background-color: #ffffff; transition: background 0.3s; }
-  .player { border-radius: 50%; width: 40px; height: 40px; position: absolute; top: 5px; left: 5px; transition: all 0.5s; }
+  .board { display: grid; grid-template-columns: repeat(15, 50px); grid-template-rows: repeat(15, 50px); margin: 20px auto; border: 4px solid #004d40; border-radius: 15px; background-color: #a7ffeb; }
+  .cell { border: 1px solid #999; width: 50px; height: 50px; position: relative; transition: background 0.3s, transform 0.3s; }
+  .player { border-radius: 50%; width: 40px; height: 40px; position: absolute; top: 5px; left: 5px; transition: all 0.5s; box-shadow: 1px 1px 5px #555; }
   .p1 { background-color: red; }
   .p2 { background-color: green; }
   .p3 { background-color: yellow; }
   .p4 { background-color: blue; }
   .controls { margin: 20px; }
   .balance { margin: 10px; font-weight: bold; font-size: 18px; }
-  button { padding: 12px 25px; margin: 5px; border: none; border-radius: 5px; background-color: #00796b; color: white; cursor: pointer; transition: background 0.3s; }
+  button { padding: 12px 25px; margin: 5px; border: none; border-radius: 5px; background-color: #00796b; color: white; cursor: pointer; font-size: 16px; transition: background 0.3s; }
   button:hover { background-color: #004d40; }
-  .star { background-color: orange; border-radius: 50%; }
+  .star { background-color: orange; border-radius: 50%; box-shadow: 0 0 5px #ff9800; }
   .home-cell { background-color: #b2dfdb; border-radius: 5px; }
+  .dice { font-size: 20px; font-weight: bold; color: #004d40; margin-top: 10px; }
 </style>
 </head>
 <body>
-<h1>৪-প্লেয়ার লুডু গেম - Pro UI</h1>
+<h1>৪-প্লেয়ার লুডু গেম - Final Version</h1>
 <div class="balance" id="balance"></div>
 <div class="controls">
   <button onclick="rollDice()">Dice Roll</button>
@@ -30,33 +32,98 @@
   <button onclick="withdraw()">Withdraw</button>
 </div>
 <div class="board" id="board"></div>
-<div id="diceResult" style="margin-top:10px; font-size:16px;"></div>
+<div class="dice" id="diceResult"></div>
 <script>
 const board = document.getElementById('board');
 const balanceEl = document.getElementById('balance');
-const diceResultEl = document.getElementById('diceResult');// Initialize board with home/star cells for(let i=0;i<225;i++) { const cell = document.createElement('div'); cell.className = 'cell'; if([0,14,210,224].includes(i)) cell.classList.add('home-cell'); if([7,37,187,217].includes(i)) cell.classList.add('star'); board.appendChild(cell); }
+const diceResultEl = document.getElementById('diceResult');
 
-// Players let players = [ {pos: null, color: 'p1', balance: 1000, home: true, startPos:0}, {pos: null, color: 'p2', balance: 1000, home: true, startPos:14}, {pos: null, color: 'p3', balance: 1000, home: true, startPos:210}, {pos: null, color: 'p4', balance: 1000, home: true, startPos:224} ];
+// Initialize board with home/star cells
+for(let i=0;i<225;i++) {
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  if([0,14,210,224].includes(i)) cell.classList.add('home-cell');
+  if([7,37,187,217].includes(i)) cell.classList.add('star');
+  board.appendChild(cell);
+}
+
+// Players
+let players = [
+  {pos: null, color: 'p1', balance: 1000, home: true, startPos:0},
+  {pos: null, color: 'p2', balance: 1000, home: true, startPos:14},
+  {pos: null, color: 'p3', balance: 1000, home: true, startPos:210},
+  {pos: null, color: 'p4', balance: 1000, home: true, startPos:224}
+];
 
 let currentPlayer = 0;
 
-function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { if(!p.home && p.pos !== null) { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); } }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
+function updateBoard() {
+  document.querySelectorAll('.cell').forEach(cell => cell.innerHTML='');
+  players.forEach((p,i) => {
+    if(!p.home && p.pos !== null) {
+      const div = document.createElement('div');
+      div.className = 'player ' + p.color;
+      document.querySelectorAll('.cell')[p.pos].appendChild(div);
+    }
+  });
+  balanceEl.innerText = `Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}`;
+}
 
-function rollDice() { const dice = Math.floor(Math.random()*6)+1; diceResultEl.innerText = Player ${currentPlayer+1} rolled: ${dice}; movePlayer(dice); }
+function rollDice() {
+  const dice = Math.floor(Math.random()*6)+1;
+  diceResultEl.innerText = `Player ${currentPlayer+1} rolled: ${dice}`;
+  movePlayer(dice);
+}
 
-function movePlayer(dice) { let player = players[currentPlayer]; if(player.home && dice === 6) { player.home = false; player.pos = player.startPos; } else if(!player.home && player.pos !== null) { player.pos += dice; if(player.pos > 224) player.pos = 224; }
+function movePlayer(dice) {
+  let player = players[currentPlayer];
+  if(player.home && dice === 6) {
+    player.home = false;
+    player.pos = player.startPos;
+  } else if(!player.home && player.pos !== null) {
+    player.pos += dice;
+    if(player.pos > 224) player.pos = 224;
+  }
 
-// Attack check players.forEach((p,i) => { if(i !== currentPlayer && p.pos === player.pos && !p.home) { p.home = true; p.pos = null; alert(Player ${currentPlayer+1} attacked Player ${i+1}!); } });
+  // Attack check
+  players.forEach((p,i) => {
+    if(i !== currentPlayer && p.pos === player.pos && !p.home) {
+      p.home = true;
+      p.pos = null;
+      alert(`Player ${currentPlayer+1} attacked Player ${i+1}!`);
+    }
+  });
+
+  updateBoard();
+
+  if(player.home === false && dice === 6) {
+    diceResultEl.innerText += ' - You got 6! Roll again.';
+  } else {
+    currentPlayer = (currentPlayer + 1) % 4;
+  }
+}
+
+function deposit() {
+  let amount = parseInt(prompt('Deposit amount:'));
+  if(amount > 0) {
+    players[currentPlayer].balance += amount;
+    updateBoard();
+    alert(`Player ${currentPlayer+1} deposited ${amount}`);
+  }
+}
+
+function withdraw() {
+  let amount = parseInt(prompt('Withdraw amount:'));
+  if(amount > 0 && amount <= players[currentPlayer].balance) {
+    players[currentPlayer].balance -= amount;
+    updateBoard();
+    alert(`Player ${currentPlayer+1} withdrew ${amount}`);
+  } else {
+    alert('Insufficient balance');
+  }
+}
 
 updateBoard();
-
-if(player.home === false && dice === 6) { diceResultEl.innerText += ' - You got 6! Roll again.'; } else { currentPlayer = (currentPlayer + 1) % 4; } }
-
-function deposit() { let amount = parseInt(prompt('Deposit amount:')); if(amount > 0) { players[currentPlayer].balance += amount; updateBoard(); alert(Player ${currentPlayer+1} deposited ${amount}); } }
-
-function withdraw() { let amount = parseInt(prompt('Withdraw amount:')); if(amount > 0 && amount <= players[currentPlayer].balance) { players[currentPlayer].balance -= amount; updateBoard(); alert(Player ${currentPlayer+1} withdrew ${amount}); } else { alert('Insufficient balance'); } }
-
-updateBoard(); </script>
-
+</script>
 </body>
 </html>
