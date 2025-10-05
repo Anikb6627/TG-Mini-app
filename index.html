@@ -1,324 +1,52 @@
-<!doctype html>
-<html lang="bn">
+<!DOCTYPE html><html lang="bn">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Better Ludo — 4 Player Demo</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>৪-প্লেয়ার লুডু গেম</title>
 <style>
-  :root{--accent:#1e88ff;--bg:#f3f7fb}
-  body{margin:0;font-family:Inter, NotoSansBengali, Roboto, sans-serif;background:var(--bg);color:#0b1220}
-  .top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid #e6eef8}
-  h1{margin:0;font-size:16px}
-  .wallet{display:flex;gap:10px;align-items:center}
-  .container{max-width:980px;margin:18px auto;padding:12px}
-  .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(16,24,40,0.06)}
-  #boardWrap{display:flex;justify-content:center}
-  canvas{width:92vw;max-width:640px;height:92vw;max-height:640px;background:linear-gradient(180deg,#ffffff,#f1f6ff);border-radius:12px;display:block}
-  .controls{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px}
-  button{background:var(--accent);color:#fff;border:none;padding:10px 12px;border-radius:8px;cursor:pointer;font-weight:600}
-  .muted{color:#556;font-size:13px}
-  .log{height:140px;overflow:auto;padding:8px;background:#fbfeff;border-radius:8px;border:1px solid #eef6ff;margin-top:12px}
-  @media(min-width:900px){ .grid{display:flex;gap:12px} .left{flex:2} .right{flex:1} }
+  body { font-family: Arial, sans-serif; background-color: #f0f0f0; text-align: center; }
+  .board { display: grid; grid-template-columns: repeat(15, 40px); grid-template-rows: repeat(15, 40px); margin: 20px auto; }
+  .cell { border: 1px solid #999; width: 40px; height: 40px; position: relative; }
+  .player { border-radius: 50%; width: 30px; height: 30px; position: absolute; top: 5px; left: 5px; }
+  .p1 { background-color: red; }
+  .p2 { background-color: green; }
+  .p3 { background-color: yellow; }
+  .p4 { background-color: blue; }
+  .controls { margin: 20px; }
+  .balance { margin: 10px; }
+  button { padding: 10px 20px; margin: 5px; }
 </style>
 </head>
 <body>
-  <div class="top">
-    <h1>Telegram Ludo — Better Prototype</h1>
-    <div class="wallet">
-      <div class="muted">Coins</div>
-      <div id="balance" style="font-weight:700">2000</div>
-      <button id="buyBtn">Buy 100</button>
-    </div>
-  </div>
-
-  <div class="container">
-    <div class="card grid">
-      <div class="left card" style="padding:12px">
-        <div id="boardWrap"><canvas id="board" width="640" height="640"></canvas></div>
-        <div class="controls">
-          <button id="rollBtn">Roll Dice</button>
-          <div id="dice" class="muted">Dice: -</div>
-          <button id="moveBtn">Move</button>
-          <div id="turnLabel" style="margin-left:12px" class="muted">Turn: -</div>
-        </div>
-        <div class="muted" style="text-align:center;margin-top:8px;font-size:13px">Demo: client-side moves — production should be server-authoritative</div>
-      </div>
-
-      <div class="right card" style="padding:12px">
-        <h3 style="margin:0 0 8px 0">Players</h3>
-        <div id="players">
-          <div><strong>Blue:</strong> You</div>
-          <div><strong>Green:</strong> CPU</div>
-          <div><strong>Yellow:</strong> CPU</div>
-          <div><strong>Red:</strong> CPU</div>
-        </div>
-
-        <div style="margin-top:12px">
-          <button id="startBtn" style="background:#0ea5a1">Start Match</button>
-          <button id="resetBtn" style="background:#ef4444">Reset</button>
-        </div>
-
-        <h4 style="margin-top:12px">Activity</h4>
-        <div id="log" class="log"></div>
-      </div>
-    </div>
-  </div>
-
+<h1>৪-প্লেয়ার লুডু গেম</h1>
+<div class="balance" id="balance">Player Balances: P1: 1000, P2: 1000, P3: 1000, P4: 1000</div>
+<div class="controls">
+  <button onclick="rollDice()">Dice Roll</button>
+  <button onclick="deposit()">Deposit</button>
+  <button onclick="withdraw()">Withdraw</button>
+</div>
+<div class="board" id="board"></div>
+<div id="diceResult"></div>
 <script>
-/*
-  Better 4-player Ludo demo (client-side).
-  - Board path: 0..51 (standard outer track)
-  - Each player has 4 tokens; each token state = {pos: -1} (-1 means at home)
-  - Entry square index per player: blue 0, green 13, yellow 26, red 39
-  - Home stretch / finishing not fully implemented for brevity, but moving around track works.
-  - For real game implement final home lanes & capture rules server-side.
-*/
+const board = document.getElementById('board');
+const balanceEl = document.getElementById('balance');
+const diceResultEl = document.getElementById('diceResult');// Initialize board for(let i=0;i<225;i++) { const cell = document.createElement('div'); cell.className = 'cell'; board.appendChild(cell); }
 
-// UI
-const logEl = document.getElementById('log');
-function log(msg){ const d=new Date().toLocaleTimeString(); logEl.prepend(document.createElement('div')).textContent='['+d+'] '+msg; }
-function q(id){ return document.getElementById(id) }
+// Players let players = [ {pos: 0, color: 'p1', balance: 1000}, {pos: 0, color: 'p2', balance: 1000}, {pos: 0, color: 'p3', balance: 1000}, {pos: 0, color: 'p4', balance: 1000} ];
 
-// Canvas + board mapping
-const canvas = q('board'), ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
-const center = {x:W/2,y:H/2};
+let currentPlayer = 0;
 
-// board geometry
-const outer = 560; // playable square size
-const margin = (W-outer)/2;
-const cell = outer/15; // use 15x15 grid representation to draw Ludo board squares
+function updateBoard() { document.querySelectorAll('.cell').forEach(cell => cell.innerHTML=''); players.forEach((p,i) => { const div = document.createElement('div'); div.className = 'player ' + p.color; document.querySelectorAll('.cell')[p.pos].appendChild(div); }); balanceEl.innerText = Player Balances: P1: ${players[0].balance}, P2: ${players[1].balance}, P3: ${players[2].balance}, P4: ${players[3].balance}; }
 
-// Precompute path coordinates for 52 outer squares (approx positions)
-// We'll map indices to x,y normalized (0..1) so drawing scales with canvas size.
-let path = []; // array of {x,y} normalized 0..1
-(function buildPath(){
-  // We'll layout path around the square perimeter following Ludo order
-  // For simplicity make 52 positions around edges: top row left->right (0..6), right column top->bottom (7..20), bottom row right->left (21..27), left column bottom->top (28..41), top row left small section (42..51)
-  // To be consistent, we'll generate 52 points around the perimeter evenly.
-  const total=52;
-  for(let i=0;i<total;i++){
-    const theta = (i/total) * Math.PI*2; // param around circle to spread nicely
-    // map to square perimeter: project circle point to square edge
-    const cx = Math.cos(theta), cy = Math.sin(theta);
-    // project onto max abs axis to place on square
-    const nx = cx/Math.max(Math.abs(cx), Math.abs(cy));
-    const ny = cy/Math.max(Math.abs(cx), Math.abs(cy));
-    // normalize from -1..1 to 0..1 inside inner square margin
-    const x = 0.5 + 0.4 * nx;
-    const y = 0.5 + 0.4 * ny;
-    path.push({x,y});
-  }
-})();
+function rollDice() { const dice = Math.floor(Math.random()*6)+1; diceResultEl.innerText = Player ${currentPlayer+1} rolled: ${dice}; movePlayer(dice); }
 
-// players & tokens
-const players = [
-  {id:'blue', color:'#0b78ff', entry:0},
-  {id:'green', color:'#22c55e', entry:13},
-  {id:'yellow', color:'#f59e0b', entry:26},
-  {id:'red', color:'#ef4444', entry:39}
-];
-// each player has 4 tokens
-let tokens = [];
-for(let p=0;p<4;p++){
-  tokens[p]=[];
-  for(let t=0;t<4;t++) tokens[p].push({pos:-1}); // -1 at home
-}
+function movePlayer(dice) { players[currentPlayer].pos += dice; if(players[currentPlayer].pos >= 224) players[currentPlayer].pos = 224; updateBoard(); currentPlayer = (currentPlayer + 1) % 4; }
 
-let turn = 0;
-let dice = null;
-q('turnLabel').textContent = 'Not started';
+function deposit() { let amount = parseInt(prompt('Deposit amount:')); if(amount > 0) { players[currentPlayer].balance += amount; updateBoard(); alert(Player ${currentPlayer+1} deposited ${amount}); } }
 
-// draw function
-function draw(){
-  ctx.clearRect(0,0,W,H);
-  // background card
-  ctx.fillStyle='#fff'; ctx.fillRect(margin,margin,outer,outer);
-  // draw grid faint
-  ctx.strokeStyle='#eef4ff'; ctx.lineWidth=1;
-  for(let i=0;i<=15;i++){
-    // vertical
-    const x = margin + (outer/15)*i;
-    ctx.beginPath(); ctx.moveTo(x, margin); ctx.lineTo(x, margin+outer); ctx.stroke();
-    // horizontal
-    const y = margin + (outer/15)*i;
-    ctx.beginPath(); ctx.moveTo(margin, y); ctx.lineTo(margin+outer, y); ctx.stroke();
-  }
+function withdraw() { let amount = parseInt(prompt('Withdraw amount:')); if(amount > 0 && amount <= players[currentPlayer].balance) { players[currentPlayer].balance -= amount; updateBoard(); alert(Player ${currentPlayer+1} withdrew ${amount}); } else { alert('Insufficient balance'); } }
 
-  // draw path squares (small rounded) and indices optionally
-  for(let i=0;i<path.length;i++){
-    const p = path[i];
-    const px = margin + p.x*outer;
-    const py = margin + p.y*outer;
-    // square
-    ctx.fillStyle = '#fafcff';
-    ctx.strokeStyle = '#e6efff';
-    roundRect(ctx, px-14, py-14, 28,28,6, true, true);
-    // index small
-    ctx.fillStyle='#9fb0d8'; ctx.font='10px sans-serif'; ctx.fillText(i, px-8, py+4);
-  }
+updateBoard(); </script>
 
-  // draw tokens
-  for(let pi=0;pi<players.length;pi++){
-    for(let ti=0;ti<tokens[pi].length;ti++){
-      const tk = tokens[pi][ti];
-      if(tk.pos === -1){
-        // draw at home corner positions (4 small circles)
-        const homeCoord = homePosition(pi, ti);
-        drawToken(homeCoord.x, homeCoord.y, players[pi].color, 12);
-      } else {
-        const idx = (tk.pos)%path.length;
-        const p = path[idx];
-        drawToken(margin + p.x*outer, margin + p.y*outer, players[pi].color, 12, true);
-      }
-    }
-  }
-
-  // highlight current player's entry
-  const entryIdx = players[turn].entry;
-  const e = path[entryIdx];
-  ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-  roundRect(ctx, margin + e.x*outer - 18, margin + e.y*outer - 18, 36,36,8,false,true);
-}
-
-// helper to draw circle token
-function drawToken(x,y,color,r,fill=true){
-  ctx.beginPath(); ctx.fillStyle = color; ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.closePath();
-  if(!fill){ ctx.strokeStyle='#000'; ctx.stroke(); }
-}
-
-// draw rounded rect helper
-function roundRect(ctx,x,y,w,h,r,fill,stroke){
-  if(r===undefined) r=5;
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,y+h,r);
-  ctx.arcTo(x,y+h,x,y,r);
-  ctx.arcTo(x,y,x+w,y,r);
-  ctx.closePath();
-  if(fill) ctx.fillStyle = '#fff', ctx.fill();
-  if(stroke) ctx.strokeStyle = '#cfe4ff', ctx.stroke();
-}
-
-// home positions (four tokens per player) arranged in player corners
-function homePosition(playerIndex, tokenIndex){
-  // corners: 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left
-  const cornerOffsets = [
-    {x: margin + outer*0.12, y: margin + outer*0.12},
-    {x: margin + outer*0.88, y: margin + outer*0.12},
-    {x: margin + outer*0.88, y: margin + outer*0.88},
-    {x: margin + outer*0.12, y: margin + outer*0.88}
-  ];
-  const base = cornerOffsets[playerIndex];
-  // arrange 2x2
-  const dx = (tokenIndex%2===0)? -12 : 12;
-  const dy = (tokenIndex<2)? -12 : 12;
-  return {x: base.x + dx, y: base.y + dy};
-}
-
-// simple animation move (teleport with small lerp)
-function animateMove(playerIndex, tokenIndex, fromPos, toPos, cb){
-  const steps = 12; let s=0;
-  const start = (fromPos===-1)? homePosition(playerIndex, tokenIndex) : {x: margin + path[fromPos%path.length].x*outer, y: margin + path[fromPos%path.length].y*outer};
-  const end = {x: margin + path[toPos%path.length].x*outer, y: margin + path[toPos%path.length].y*outer};
-  const id = setInterval(()=>{ s++; const t=s/steps; const x = start.x + (end.x-start.x)*t; const y = start.y + (end.y-start.y)*t;
-    // redraw static board then draw moving token on top
-    draw();
-    drawToken(x,y,players[playerIndex].color,14);
-    if(s>=steps){ clearInterval(id); if(cb) cb(); }
-  }, 16);
-}
-
-// roll dice (client random for demo)
-function rollDice(){
-  dice = Math.floor(Math.random()*6)+1;
-  q('dice').textContent = 'Dice: '+dice;
-  log('Rolled '+dice);
-  return dice;
-}
-
-// find movable tokens for current player
-function movableTokensFor(playerIndex){
-  // rule: if token at home (-1) only can enter if dice==6 -> move to entry
-  // else token moves forward by dice
-  const arr = [];
-  for(let i=0;i<tokens[playerIndex].length;i++){
-    const tk = tokens[playerIndex][i];
-    if(tk.pos===-1){
-      if(dice===6) arr.push(i);
-    } else {
-      arr.push(i);
-    }
-  }
-  return arr;
-}
-
-// perform move: choose first movable token (simple auto for demo)
-function moveSelected(){
-  if(dice==null){ alert('Roll first'); return; }
-  const playerIndex = turn;
-  const movable = movableTokensFor(playerIndex);
-  if(movable.length===0){ log('No movable tokens for player '+players[playerIndex].id); endTurn(); return; }
-  const idx = movable[0];
-  const tk = tokens[playerIndex][idx];
-  const from = tk.pos;
-  let to;
-  if(from===-1) to = players[playerIndex].entry;
-  else to = (from + dice) % path.length;
-  // animate
-  animateMove(playerIndex, idx, from, to, ()=>{
-    tokens[playerIndex][idx].pos = to;
-    log(players[playerIndex].id + ' moved token '+(idx+1)+' to '+to);
-    // simple capture: if any opponent token occupies same pos -> send them home (demo)
-    for(let pi=0; pi<tokens.length; pi++){
-      if(pi===playerIndex) continue;
-      for(let ti=0; ti<tokens[pi].length; ti++){
-        if(tokens[pi][ti].pos === to){
-          tokens[pi][ti].pos = -1;
-          log('Captured '+players[pi].id+' token '+(ti+1));
-        }
-      }
-    }
-    // if dice!=6 -> next turn
-    if(dice!==6) endTurn(); else { log('Got 6! play again'); dice=null; q('dice').textContent='Dice: -'; }
-  });
-}
-
-// end turn
-function endTurn(){
-  dice = null; q('dice').textContent='Dice: -';
-  turn = (turn+1)%4;
-  q('turnLabel').textContent = players[turn].id.toUpperCase();
-  // if CPU turn -> auto roll & move after short delay
-  if(players[turn].id !== 'blue'){ // assume blue=You
-    setTimeout(()=>{ rollDice(); setTimeout(()=> moveSelected(), 500); }, 600);
-  }
-}
-
-// Start match: reset tokens and set you as blue
-function startMatch(){
-  for(let p=0;p<4;p++) for(let t=0;t<4;t++) tokens[p][t].pos = -1;
-  turn = 0; dice = null; q('turnLabel').textContent = players[turn].id.toUpperCase();
-  q('dice').textContent = 'Dice: -';
-  log('Match started');
-  draw();
-  // if CPU present on blue? in this demo only blue is you.
-}
-
-// reset
-function resetAll(){ startMatch(); logEl.innerHTML=''; log('Reset done'); }
-
-// wiring
-q('rollBtn').addEventListener('click', ()=>{ if(q('turnLabel').textContent==='Not started'){ alert('Start match first'); return;} rollDice(); });
-q('moveBtn').addEventListener('click', ()=> moveSelected());
-q('startBtn').addEventListener('click', ()=> startMatch());
-q('resetBtn').addEventListener('click', ()=> resetAll());
-q('buyBtn').addEventListener('click', ()=>{ let b=Number(q('balance').textContent||0); b+=100; q('balance').textContent=b; log('Bought 100 coins (demo)') });
-
-// initial draw
-draw();
-log('Prototype ready — Press Start Match then Roll Dice');
-</script>
 </body>
 </html>
